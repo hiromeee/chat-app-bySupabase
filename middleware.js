@@ -1,31 +1,7 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server' // server.js をインポート
+import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request) {
-  const supabase = createClient()
-
-  // セッション情報を取得・更新
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  const { pathname } = request.nextUrl
-
-  // ログインしていない場合
-  if (!session) {
-    // ログインページ以外にアクセスしようとしたら、ログインページにリダイレクト
-    if (pathname !== '/login') {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-  } else {
-    // ログインしている場合
-    // ログインページにアクセスしようとしたら、ホームページにリダイレクト
-    if (pathname === '/login') {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
-  }
-
-  return NextResponse.next()
+  return await updateSession(request)
 }
 
 export const config = {
