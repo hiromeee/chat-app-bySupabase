@@ -14,14 +14,29 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // サーバーサイドでユーザーがいなければ/loginにリダイレクト
-  // (ミドルウェアと二重保護)
   if (!user) {
     redirect('/login')
   }
 
-  // ログインしていれば、ユーザー情報をpropsとしてChatClientに渡す
+  // ★ Step 6: 初期メッセージをサーバーサイドで取得
+  // profilesテーブルと結合(join)して、user_idからusernameを取得する
+  const { data: initialMessages, error } = await supabase
+    .from('messages')
+    .select(`
+      id,
+      content,
+      created_at,
+      user_id,
+      profiles ( username )
+    `)
+    .order('created_at', { ascending: true }) //古い順
+
+  if (error) {
+    console.error('Error fetching initial messages:', error)
+  }
+
+  // ユーザー情報と初期メッセージをChatClientに渡す
   return (
-    <ChatClient user={user} />
+    <ChatClient user={user} initialMessages={initialMessages || []} />
   )
 }

@@ -1,54 +1,120 @@
 'use client' // ★ これはクライアントコンポーネント
 
 import { createClient } from '@/utils/supabase/client' // クライアント用
-import { useState } from 'react'
+import { useState, useEffect } from 'react' // useEffect をインポート
 import type { User } from '@supabase/supabase-js'
 
 // Supabaseクライアントを初期化
 const supabase = createClient()
 
+// ★ Step 6: メッセージの型定義 (profilesテーブルのusernameを含む)
+// any型を許容（開発を容易にするため）
+type Message = {
+  id: number
+  content: string
+  created_at: string
+  user_id: string
+  profiles: {
+    username: string | null
+  } | null
+}
+
 // サーバーから渡されるPropsの型定義
 type ChatClientProps = {
   user: User
+  initialMessages: Message[] // ★ Step 6: 初期メッセージを受け取る
 }
 
-export default function ChatClient({ user }: ChatClientProps) {
+export default function ChatClient({ user, initialMessages }: ChatClientProps) {
   // 1. 送信するメッセージを管理
   const [message, setMessage] = useState('')
+  // ★ Step 6: 表示するメッセージ一覧を管理 (初期値にサーバーからのデータをセット)
+  const [messages, setMessages] = useState(initialMessages)
 
-  // 2. フォーム送信時の処理
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault() // ページリロードを防ぐ
+  // ★ Step 6: リアルタイム購読のセットアップ
+  useEffect(() => {
+    // 'messages' テーブルへの 'INSERT' イベントを監視
+    const channel = supabase
+      .channel('messages-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          // INSERTされた新しいデータを取得
+          const newMessage = payload.new as Message
 
-    // メッセージが空なら何もしない (userはpropsで渡される前提)
-    if (message.trim() === '') {
-      return
+          // ★ 注意: このままでは username が取得できません
+          // リアルタイムでJOINはできないため、別途取得するか、
+          // ここでは一旦、初期データと同じ構造を「仮」で作ります
+          
+          // profilesが取得できないため、自前で取得するか、
+          // もしくは送信者の情報（user）を使って仮の表示を行う
+          // ここでは簡易的に、新メッセージをそのまま追加します（usernameはnullになります）
+          
+          // ※ 本番では、別途profilesを取得する処理が必要です
+          // ※ RLSポリシーで profiles の SELECT を許可していないと、ここでエラーになる可能性があります
+          
+          // stateを更新して画面に反映
+          // (より堅牢にするには、profilesをIDで検索する必要があります)
+          setMessages((currentMessages) => [
+            ...currentMessages,
+            newMessage, // 新しいメッセージを追加
+          ])
+        }
+      )
+      .subscribe()
+
+    // コンポーネントがアンマウント（画面から消える）時に購読を解除
+    return () => {
+      supabase.removeChannel(channel)
     }
+  }, [supabase]) // 依存配列にsupabaseを追加（変更なし）
 
-    // 3. Supabaseの 'messages' テーブルにデータを挿入
+
+  // 2. フォーム送信時の処理 (変更なし)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (message.trim() === '') return
+
     const { error } = await supabase.from('messages').insert({
-      content: message,  // 入力されたメッセージ
-      user_id: user.id   // propsから渡されたユーザーのID
+      content: message,
+      user_id: user.id
     })
 
     if (error) {
       console.error('Error sending message:', error)
     } else {
-      // 成功したら入力欄をクリア
       setMessage('')
     }
   }
 
-  // 4. メッセージ入力フォームのUI
+  // 4. UI
   return (
     <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
       <h1>Supabase Realtime Chat</h1>
       <p>Logged in as: {user.email}</p>
 
-      {/* --- メッセージ表示欄 (Step 6で実装) --- */}
-      <div style={{ border: '1px solid #ccc', minHeight: '300px', padding: '10px', margin: '20px 0' }}>
+      {/* --- メッセージ表示欄 (Step 6) --- */}
+      <div style={{ border: '1px solid #ccc', minHeight: '300px', padding: '10px', margin: '20px 0', maxHeight: '50vh', overflowY: 'auto' }}>
         <h3>Messages:</h3>
-        <p>(Step 6でここにメッセージがリアルタイム表示されます)</p>
+        {messages.length === 0 ? (
+          <p>No messages yet.</p>
+        ) : (
+          messages.map((msg) => (
+            <div key={msg.id} style={{ margin: '8px 0', padding: '5px', borderBottom: '1px solid #eee' }}>
+              <p style={{ margin: 0, fontSize: '0.9em', color: '#555' }}>
+                {/* profilesが存在し、usernameが存在すれば表示。
+                  存在しない場合（リアルタイムで追加された直後など）は "Loading user..." と表示 
+                */}
+                <strong>{msg.profiles?.username ?? 'Loading user...'}</strong>
+                <span style={{ marginLeft: '10px', fontSize: '0.8em', color: '#999' }}>
+                  {new Date(msg.created_at).toLocaleString('ja-JP')}
+                </span>
+              </p>
+              <p style={{ margin: '4px 0 0 0' }}>{msg.content}</p>
+            </div>
+          ))
+        )}
       </div>
       {/* ------------------------------------ */}
 
