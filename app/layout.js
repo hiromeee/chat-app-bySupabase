@@ -1,3 +1,4 @@
+import './globals.css' // ★ スタイルを適用するために追加
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers' // ★ インポート
@@ -6,7 +7,7 @@ import { cookies } from 'next/headers' // ★ インポート
 async function signOut() {
   'use server' // サーバーアクションとして定義
   
-  const cookieStore = cookies() // ★ ここで呼び出す
+  const cookieStore = await cookies() // ★ await を追加
   const supabase = createClient(cookieStore) // ★ 渡す
   
   await supabase.auth.signOut()
@@ -14,7 +15,7 @@ async function signOut() {
 }
 
 export default async function RootLayout({ children }) {
-  const cookieStore = cookies() // ★ ここで呼び出す
+  const cookieStore = await cookies() // ★ await を追加
   const supabase = createClient(cookieStore) // ★ 渡す
 
   const {

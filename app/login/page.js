@@ -4,7 +4,7 @@ import AuthForm from './AuthForm' // 次に作成するクライアントコン�
 import { cookies } from 'next/headers' // ★ インポート
 
 export default async function Login() {
-  const cookieStore = cookies() // ★ ここで呼び出す
+  const cookieStore = await cookies() // ★ await を追加
   const supabase = createClient(cookieStore) // ★ 渡す
 
   const {
