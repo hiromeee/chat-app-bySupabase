@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/client'
 import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa, Variables } from '@supabase/auth-ui-shared' // ★ type キーワードを削除
+import { ThemeSupa } from '@supabase/auth-ui-shared' // ★ Variables のインポートを完全に削除
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
@@ -29,8 +29,8 @@ export default function AuthForm() {
     }
   }, [supabase, router])
 
-  // ダークモード対応のカスタムテーマ
-  const customThemeVariables: Variables = {
+  // ★ ダークモード対応のカスタムテーマ (型注釈を削除)
+  const customThemeVariables = { // ★ : Variables を削除
     default: {
       colors: {
         brand: '#4f46e5',
