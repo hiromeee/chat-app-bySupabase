@@ -1,15 +1,18 @@
-// 'use client' を削除 (サーバーコンポーネントにする)
-
-import { createClient } from '@/utils/supabase/server' // サーバー用
-import { cookies } from 'next/headers' // サーバー用
+import { createClient } from '@/utils/supabase/server' //
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import ChatClient from './ChatClient' // 先ほど作成したクライアントコンポーネント
+import ChatClient from './ChatClient' //
+
+// ★ profiles テーブルの型を定義（username のみ）
+type Profile = {
+  username: string | null
+}
 
 export default async function Home() {
-  const cookieStore = await cookies() // ★ サーバーサイドでcookieStoreを取得
+  const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
 
-  // サーバーサイドでユーザー情報を取得
+  // ユーザー情報を取得
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -18,9 +21,15 @@ export default async function Home() {
     redirect('/login')
   }
 
-  // ★ Step 6: 初期メッセージをサーバーサイドで取得
-  // profilesテーブルと結合(join)して、user_idからusernameを取得する
-  const { data: initialMessages, error } = await supabase
+  // ★ ユーザーのプロフィール情報（username）を取得
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', user.id)
+    .single()
+
+  // 初期メッセージを取得
+  const { data: initialMessages } = await supabase
     .from('messages')
     .select(`
       id,
@@ -29,14 +38,13 @@ export default async function Home() {
       user_id,
       profiles ( username )
     `)
-    .order('created_at', { ascending: true }) //古い順
+    .order('created_at', { ascending: true })
 
-  if (error) {
-    console.error('Error fetching initial messages:', error)
-  }
-
-  // ユーザー情報と初期メッセージをChatClientに渡す
   return (
-    <ChatClient user={user} initialMessages={initialMessages || []} />
+    <ChatClient 
+      user={user} 
+      profile={profile as Profile} // ★ プロフィール情報を渡す
+      initialMessages={initialMessages || []} 
+    />
   )
 }
