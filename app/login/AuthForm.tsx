@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/client'
 import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa, type Variables } from '@supabase/auth-ui-shared'
+import { ThemeSupa, Variables } from '@supabase/auth-ui-shared' // ★ type キーワードを削除
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
@@ -29,11 +29,11 @@ export default function AuthForm() {
     }
   }, [supabase, router])
 
-  // ダークモード対応のカスタムテーマ (変更なし)
+  // ダークモード対応のカスタムテーマ (型定義のみ残す)
   const customThemeVariables: Variables = {
     default: {
       colors: {
-        brand: '#4f46e5',
+        brand: '#4f46e5', // Indigo-600
         brandAccent: '#4338ca',
         inputText: '#111827',
         inputBackground: '#ffffff',
@@ -42,12 +42,12 @@ export default function AuthForm() {
     },
     dark: {
       colors: {
-        brand: '#6366f1',
+        brand: '#6366f1', // Indigo-500
         brandAccent: '#4f46e5',
         inputText: '#f9fafb',
-        inputBackground: '#1f2937',
-        inputBorder: '#4b5563',
-        defaultButtonBackground: '#374151',
+        inputBackground: '#1f2937', // Gray-800
+        inputBorder: '#4b5563', // Gray-600
+        defaultButtonBackground: '#374151', // Gray-700
         defaultButtonBackgroundHover: '#4b5563',
       },
     },
@@ -58,13 +58,12 @@ export default function AuthForm() {
     <Auth
       supabaseClient={supabase}
       appearance={{ 
-        theme: ThemeSupa,
+        theme: ThemeSupa, 
         variables: customThemeVariables
       }} 
       theme="dark" 
       
-      // ★★★ ここを修正 ★★★
-      providers={['github']} // ← 空の配列 [] から変更
+      providers={['github']} // GitHub認証を有効化
       
       localization={{
         variables: {
