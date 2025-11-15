@@ -29,11 +29,11 @@ export default function AuthForm() {
     }
   }, [supabase, router])
 
-  // ダークモード対応のカスタムテーマ (型定義のみ残す)
+  // ダークモード対応のカスタムテーマ
   const customThemeVariables: Variables = {
     default: {
       colors: {
-        brand: '#4f46e5', // Indigo-600
+        brand: '#4f46e5',
         brandAccent: '#4338ca',
         inputText: '#111827',
         inputBackground: '#ffffff',
@@ -42,12 +42,12 @@ export default function AuthForm() {
     },
     dark: {
       colors: {
-        brand: '#6366f1', // Indigo-500
+        brand: '#6366f1',
         brandAccent: '#4f46e5',
         inputText: '#f9fafb',
-        inputBackground: '#1f2937', // Gray-800
-        inputBorder: '#4b5563', // Gray-600
-        defaultButtonBackground: '#374151', // Gray-700
+        inputBackground: '#1f2937',
+        inputBorder: '#4b5563',
+        defaultButtonBackground: '#374151',
         defaultButtonBackgroundHover: '#4b5563',
       },
     },
