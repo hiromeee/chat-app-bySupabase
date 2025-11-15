@@ -103,21 +103,33 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     const messageContent = message
     setMessage('') 
 
-    // ★★★ 修正点: single() を削除し、[Message] として扱う ★★★
+    // ★ insertedMessages は Message[] 型の配列として取得される
     const { data: insertedMessages, error } = await supabase
       .from('messages')
       .insert({ content: messageContent, user_id: user.id, room_id: room.id })
       .select(`id, content, created_at, user_id, profiles ( username )`) 
-      // .single() // ← これを削除。常に配列として扱う
-    
+      // .single() は削除済み
+
     if (error) {
       console.error('Error sending message:', error)
       setMessage(messageContent) 
     } else if (insertedMessages && insertedMessages.length > 0) {
-      // 配列の最初の要素を Message 型として状態に追加する
+      // ★★★ 修正点: 型の構造をクリーンアップする ★★★
+      
+      const messageData = insertedMessages[0];
+
+      // 取得したデータから、profiles配列の最初の要素を取り出してオブジェクトにする
+      const cleanedMessage: Message = {
+        ...messageData,
+        // profilesが配列で返ってくるのを修正: 最初の要素を取り出すか、nullにする
+        profiles: messageData.profiles && Array.isArray(messageData.profiles) 
+          ? messageData.profiles[0] 
+          : null
+      } as Message; // 最終的にMessage型としてキャスト
+
       setMessages((currentMessages) => [
         ...currentMessages,
-        insertedMessages[0] as Message, 
+        cleanedMessage, // クリーンなメッセージを追加
       ])
     }
   }
