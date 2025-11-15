@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server' //
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link' 
+import RoomSidebar from './components/RoomSidebar' // ★ 作成したサイドバーをインポート
 
 // signOut サーバーアクション (変更なし)
 async function signOut() {
@@ -21,17 +22,14 @@ export default async function RootLayout({ children }) {
   } = await supabase.auth.getSession()
 
   return (
-    // ★ `<html>` にダークモードクラスを追加
     <html lang="ja" className="dark">
-      {/* ★ `<body>` にTailwindの基本スタイルとダークモードの背景/文字色を適用 */}
       <body className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
         
-        {/* ★ ヘッダーをTailwindクラスで置き換え */}
+        {/* ヘッダー (変更なし) */}
         <header className="flex h-16 items-center justify-between border-b border-gray-200 px-6 dark:border-gray-800">
           <Link href="/" className="text-xl font-bold no-underline hover:opacity-80">
             <h2>Supabase Chat App</h2>
           </Link>
-          
           {session && (
             <div className="flex items-center gap-4">
               <Link href="/profile" className="text-sm text-gray-600 underline hover:text-black dark:text-gray-400 dark:hover:text-white">
@@ -49,10 +47,20 @@ export default async function RootLayout({ children }) {
           )}
         </header>
         
-        {/* ★ mainコンテンツは変更なし */}
-        <main>
-          {children}
-        </main>
+        {/* ★ メインコンテンツのレイアウトを変更 */}
+        <div className="flex h-[calc(100vh-4rem)]"> {/* ヘッダー高さを引いた残り全部 */}
+          
+          {/* ログインしている時だけサイドバーを表示 */}
+          {session && (
+            <RoomSidebar />
+          )}
+
+          {/* メインコンテンツエリア */}
+          <main className="flex-1">
+            {children}
+          </main>
+        </div>
+        
       </body>
     </html>
   )
