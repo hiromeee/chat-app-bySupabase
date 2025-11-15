@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/client'
 import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa } from '@supabase/auth-ui-shared' // ★ Variables のインポートを完全に削除
+import { ThemeSupa } from '@supabase/auth-ui-shared' // ★ Variables, type のインポートを完全に削除
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
@@ -29,12 +29,11 @@ export default function AuthForm() {
     }
   }, [supabase, router])
 
-  // ★ ダークモード対応のカスタムテーマ (型注釈を削除)
-  // TypeScriptは中身から型を自動で推論するため、ビルドは成功します。
+  // ★ カスタムテーマ (型注釈を削除)
   const customThemeVariables = { 
     default: {
       colors: {
-        brand: '#4f46e5',
+        brand: '#4f46e5', // Indigo-600
         brandAccent: '#4338ca',
         inputText: '#111827',
         inputBackground: '#ffffff',
@@ -43,12 +42,12 @@ export default function AuthForm() {
     },
     dark: {
       colors: {
-        brand: '#6366f1',
+        brand: '#6366f1', // Indigo-500
         brandAccent: '#4f46e5',
         inputText: '#f9fafb',
-        inputBackground: '#1f2937',
-        inputBorder: '#4b5563',
-        defaultButtonBackground: '#374151',
+        inputBackground: '#1f2937', // Gray-800
+        inputBorder: '#4b5563', // Gray-600
+        defaultButtonBackground: '#374151', // Gray-700
         defaultButtonBackgroundHover: '#4b5563',
       },
     },
@@ -60,7 +59,7 @@ export default function AuthForm() {
       supabaseClient={supabase}
       appearance={{ 
         theme: ThemeSupa, 
-        variables: customThemeVariables
+        variables: customThemeVariables // 型注釈なしでオブジェクトを渡す
       }} 
       theme="dark" 
       
