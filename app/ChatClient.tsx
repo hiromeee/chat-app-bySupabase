@@ -1,14 +1,13 @@
-'use client' // ★ これはクライアントコンポーネント
+'use client' 
 
-import { createClient } from '@/utils/supabase/client' // クライアント用
-import { useState, useEffect } from 'react' // useEffect をインポート
+import { createClient } from '@/utils/supabase/client'
+import { useState, useEffect, useRef } from 'react' 
 import type { User } from '@supabase/supabase-js'
 
 // Supabaseクライアントを初期化
 const supabase = createClient()
 
-// ★ Step 6: メッセージの型定義 (profilesテーブルのusernameを含む)
-// any型を許容（開発を容易にするため）
+// メッセージの型定義
 type Message = {
   id: number
   content: string
@@ -16,85 +15,125 @@ type Message = {
   user_id: string
   profiles: {
     username: string | null
-  } | null
+  } | null 
 }
 
 // サーバーから渡されるPropsの型定義
 type ChatClientProps = {
   user: User
-  initialMessages: Message[] // ★ Step 6: 初期メッセージを受け取る
+  initialMessages: Message[] 
 }
 
 export default function ChatClient({ user, initialMessages }: ChatClientProps) {
-  // 1. 送信するメッセージを管理
   const [message, setMessage] = useState('')
-  // ★ Step 6: 表示するメッセージ一覧を管理 (初期値にサーバーからのデータをセット)
   const [messages, setMessages] = useState(initialMessages)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
-  // ★ Step 6: リアルタイム購読のセットアップ
+  // メッセージが更新されるたびに一番下にスクロールする
   useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+
+  // ★★★ リアルタイム購読 (関数型アップデート版) ★★★
+  useEffect(() => {
+
+    // 新しいメッセージを受信したときの処理
+    const handleNewMessage = async (payload: any) => {
+      const newMessage = payload.new as Message
+
+      // 他人からのメッセージの場合、username を取得
+      // (自分のメッセージは handleSubmit で処理されるため、user_id が自分と違う場合のみ実行)
+      if (newMessage.user_id !== user.id) {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', newMessage.user_id)
+          .single()
+
+        if (error) {
+          console.error('Error fetching profile for realtime message:', error)
+          newMessage.profiles = { username: 'Unknown' } 
+        } else {
+          newMessage.profiles = { username: profile?.username ?? 'Unknown' }
+        }
+      }
+
+      // ★ 3. state を「関数型アップデート」で更新
+      setMessages((currentMessages) => {
+        // ここで currentMessages (最新のstate) に対して重複チェック
+        if (currentMessages.find((msg) => msg.id === newMessage.id)) {
+          // 既に存在する場合は、state を変更しない (重複を防ぐ)
+          return currentMessages
+        }
+        // 存在しない場合のみ、新しいメッセージを追加する
+        return [
+          ...currentMessages,
+          newMessage,
+        ]
+      })
+    }
+
     // 'messages' テーブルへの 'INSERT' イベントを監視
     const channel = supabase
       .channel('messages-channel')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
-        (payload) => {
-          // INSERTされた新しいデータを取得
-          const newMessage = payload.new as Message
-
-          // ★ 注意: このままでは username が取得できません
-          // リアルタイムでJOINはできないため、別途取得するか、
-          // ここでは一旦、初期データと同じ構造を「仮」で作ります
-          
-          // profilesが取得できないため、自前で取得するか、
-          // もしくは送信者の情報（user）を使って仮の表示を行う
-          // ここでは簡易的に、新メッセージをそのまま追加します（usernameはnullになります）
-          
-          // ※ 本番では、別途profilesを取得する処理が必要です
-          // ※ RLSポリシーで profiles の SELECT を許可していないと、ここでエラーになる可能性があります
-          
-          // stateを更新して画面に反映
-          // (より堅牢にするには、profilesをIDで検索する必要があります)
-          setMessages((currentMessages) => [
-            ...currentMessages,
-            newMessage, // 新しいメッセージを追加
-          ])
-        }
+        handleNewMessage 
       )
       .subscribe()
 
-    // コンポーネントがアンマウント（画面から消える）時に購読を解除
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase]) // 依存配列にsupabaseを追加（変更なし）
+    // ★ 依存配列から messages を削除 (関数型アップデートにより不要になった)
+  }, [supabase, user.id]) // user.id を追加 (handleNewMessage内で比較するため)
+  // ★★★ 修正ここまで ★★★
 
 
-  // 2. フォーム送信時の処理 (変更なし)
+  // ★★★ フォーム送信処理 (変更なし) ★★★
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() === '') return
 
-    const { error } = await supabase.from('messages').insert({
-      content: message,
-      user_id: user.id
-    })
+    const messageContent = message
+    setMessage('') 
+
+    const { data: insertedMessage, error } = await supabase
+      .from('messages')
+      .insert({
+        content: messageContent,
+        user_id: user.id
+      })
+      .select(`
+        id,
+        content,
+        created_at,
+        user_id,
+        profiles ( username )
+      `) 
+      .single() 
 
     if (error) {
       console.error('Error sending message:', error)
-    } else {
-      setMessage('')
+      setMessage(messageContent) 
+    } else if (insertedMessage) {
+      // 送信した瞬間に、username付きでローカル state に追加
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        insertedMessage as Message,
+      ])
     }
   }
 
-  // 4. UI
+  // UI (変更なし)
   return (
     <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
       <h1>Supabase Realtime Chat</h1>
       <p>Logged in as: {user.email}</p>
 
-      {/* --- メッセージ表示欄 (Step 6) --- */}
+      {/* --- メッセージ表示欄 --- */}
       <div style={{ border: '1px solid #ccc', minHeight: '300px', padding: '10px', margin: '20px 0', maxHeight: '50vh', overflowY: 'auto' }}>
         <h3>Messages:</h3>
         {messages.length === 0 ? (
@@ -103,10 +142,7 @@ export default function ChatClient({ user, initialMessages }: ChatClientProps) {
           messages.map((msg) => (
             <div key={msg.id} style={{ margin: '8px 0', padding: '5px', borderBottom: '1px solid #eee' }}>
               <p style={{ margin: 0, fontSize: '0.9em', color: '#555' }}>
-                {/* profilesが存在し、usernameが存在すれば表示。
-                  存在しない場合（リアルタイムで追加された直後など）は "Loading user..." と表示 
-                */}
-                <strong>{msg.profiles?.username ?? 'Loading user...'}</strong>
+                <strong>{msg.profiles?.username ?? '...'}</strong>
                 <span style={{ marginLeft: '10px', fontSize: '0.8em', color: '#999' }}>
                   {new Date(msg.created_at).toLocaleString('ja-JP')}
                 </span>
@@ -115,10 +151,11 @@ export default function ChatClient({ user, initialMessages }: ChatClientProps) {
             </div>
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
-      {/* ------------------------------------ */}
+      {/* -------------------- */}
 
-      {/* --- メッセージ送信フォーム (Step 5) --- */}
+      {/* --- メッセージ送信フォーム --- */}
       <form onSubmit={handleSubmit}>
         <input
           type="text"
