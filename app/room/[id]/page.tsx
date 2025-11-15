@@ -12,58 +12,84 @@ type Room = {
   name: string
 }
 
-// 1. Props の型定義を削除（またはコメントアウト）
-// type RoomPageProps = {
-//   params: { id: string }
-// }
+// ★ 1. Props の型を、中身が Promise であることを示すように変更
+type RoomPageProps = {
+  params: Promise<{ id: string }>
+}
 
-// 2. ページコンポーネントが "params の Promise" を直接受け取るように変更
+// ★ 2. ページコンポーネントが "Props の Promise" を受け取る
 export default async function RoomPage(
-  paramsPromise: Promise<{ id: string }> // ★ 変更
+  propsPromise: Promise<RoomPageProps> 
 ) {
   
-  // 3. Promise を await して params オブジェクトを直接取り出す
-  const params = await paramsPromise // ★ 変更
+  // ★ 3. 外側の Promise を await して props オブジェクトを取り出す
+  const props = await propsPromise
+  
+  console.log('--- [RoomPage] 1. Awaited props object:', props) 
 
+  // ★ 4. props.params の存在をチェック
+  if (!props || !props.params) {
+    console.error('--- [RoomPage] ERROR: props or props.params is missing. Redirecting to /')
+    redirect('/')
+    return; 
+  }
+  
+  // ★ 5. ★★★ 内側の Promise を await して params オブジェクトを取り出す ★★★
+  const params = await props.params;
+  console.log('--- [RoomPage] 2. Destructured params:', params) 
+
+  // 6. params.id を数値に変換
+  const roomId = parseInt(params.id, 10) 
+  console.log('--- [RoomPage] 3. roomId (parsed):', roomId) 
+
+  // 7. 変換後のIDが数値でない場合
+  if (isNaN(roomId)) {
+    console.error('--- [RoomPage] ERROR: roomId is NaN. Redirecting to /')
+    redirect('/')
+    return; 
+  }
+  
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
-  
-  // 4. params.id を数値に変換 (ここは前回の修正のまま)
-  const roomId = parseInt(params.id, 10)
 
-  // ★ 追加: 変換後のIDが数値でない場合（例: /room/abc）はリダイレクト
-  if (isNaN(roomId)) {
-    redirect('/')
-  }
+  // ... (以降のコードは変更なし) ...
 
-  // 1. ユーザー情報を取得 (必須)
+  // 8. ユーザー情報を取得
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
+    console.warn('--- [RoomPage] WARN: No user found. Redirecting to /login')
     redirect('/login')
   }
+  console.log('--- [RoomPage] 4. User ID:', user.id)
 
-  // 2. ユーザーのプロフィール情報を取得
+  // 9. プロフィール情報を取得
   const { data: profile } = await supabase
     .from('profiles')
     .select('username')
     .eq('id', user.id)
     .single()
+  console.log('--- [RoomPage] 5. Profile:', profile)
 
-  // 3. ルームの情報を取得 (ルーム名表示のため)
-  const { data: room } = await supabase
+  // 10. ルームの情報を取得
+  const { data: room, error: roomError } = await supabase
     .from('rooms')
     .select('id, name')
-    .eq('id', roomId) // ★ 数値の roomId で検索
+    .eq('id', roomId)
     .single()
   
+  console.log('--- [RoomPage] 6. Room query result:', room)
+  if (roomError) {
+    console.error('--- [RoomPage] 6b. Room query ERROR:', roomError.message)
+  }
+
   if (!room) {
-    // ルームが存在しない場合はトップにリダイレクト（または404）
+    console.warn(`--- [RoomPage] WARN: Room not found (id: ${roomId}). Redirecting to /`)
     redirect('/')
   }
 
-  // 4. このルームの初期メッセージを取得
+  // 11. 初期メッセージを取得
   const { data: initialMessages } = await supabase
     .from('messages')
     .select(`
@@ -73,10 +99,11 @@ export default async function RoomPage(
       user_id,
       profiles ( username )
     `)
-    .eq('room_id', roomId) // ★ 数値の roomId でフィルタリング
+    .eq('room_id', roomId)
     .order('created_at', { ascending: true })
+  console.log('--- [RoomPage] 7. Initial messages count:', initialMessages?.length ?? 0)
 
-  // 5. 取得した全データをクライアントコンポーネントに渡す
+  // 12. クライアントコンポーネントに渡す
   return (
     <ChatRoom 
       user={user} 
