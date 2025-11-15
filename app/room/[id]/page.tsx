@@ -1,7 +1,7 @@
-import { createClient } from '@/utils/supabase/server' // サーバー用
+import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import ChatRoom from './ChatRoom' // ★ 次に作成するクライアントコンポーネント
+import ChatRoom from './ChatRoom'
 
 // 型定義
 type Profile = {
@@ -12,10 +12,21 @@ type Room = {
   name: string
 }
 
-// ページコンポーネントは params を受け取る
-export default async function RoomPage({ params }: { params: { id: string } }) {
+// 1. Props の型を定義
+type RoomPageProps = {
+  params: { id: string }
+}
+
+// 2. ページコンポーネントが Props の "Promise" を受け取るように変更
+export default async function RoomPage(propsPromise: Promise<RoomPageProps>) {
+  
+  // 3. Promise を await して params を取り出す
+  const { params } = await propsPromise
+
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
+  
+  // 4. これで params.id が正しく読み込める
   const roomId = params.id
 
   // 1. ユーザー情報を取得 (必須)
@@ -55,7 +66,7 @@ export default async function RoomPage({ params }: { params: { id: string } }) {
       user_id,
       profiles ( username )
     `)
-    .eq('room_id', roomId) // ★ room_id でフィルタリング
+    .eq('room_id', roomId) // room_id でフィルタリング
     .order('created_at', { ascending: true })
 
   // 5. 取得した全データをクライアントコンポーネントに渡す
@@ -64,7 +75,7 @@ export default async function RoomPage({ params }: { params: { id: string } }) {
       user={user} 
       profile={profile as Profile}
       initialMessages={initialMessages || []} 
-      room={room as Room} // ★ ルーム情報も渡す
+      room={room as Room} 
     />
   )
 }
