@@ -3,8 +3,8 @@
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation' 
-import { useState, useEffect, useRef } from 'react' // ★ useRef をインポート
-import { createRoom } from '../actions' // ★ 作成したサーバーアクションをインポート
+import { useState, useEffect, useRef } from 'react' 
+import { createRoom } from '../actions' // サーバーアクション
 
 // ルームの型定義
 type Room = {
@@ -17,12 +17,14 @@ export default function RoomSidebar() {
   const pathname = usePathname() 
 
   const [rooms, setRooms] = useState<Room[]>([])
-  // const [newRoomName, setNewRoomName] = useState('') // ★ フォームが管理するので不要
-  const formRef = useRef<HTMLFormElement>(null) // ★ フォーム参照
+  const formRef = useRef<HTMLFormElement>(null) 
+  
+  // ★ モーダルの開閉状態を管理
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newRoomName, setNewRoomName] = useState('') // モーダル内の入力値
 
   // 1. リアルタイムでルーム一覧を取得・監視する (変更なし)
   useEffect(() => {
-    // 最初に全ルームを取得
     const fetchRooms = async () => {
       const { data, error } = await supabase
         .from('rooms')
@@ -37,7 +39,6 @@ export default function RoomSidebar() {
     }
     fetchRooms()
 
-    // rooms テーブルの INSERT を監視
     const channel = supabase
       .channel('rooms-channel') 
       .on(
@@ -54,43 +55,40 @@ export default function RoomSidebar() {
       )
       .subscribe()
 
-    // クリーンアップ
     return () => {
       supabase.removeChannel(channel)
     }
   }, [supabase])
 
 
-  // ★ 2. サーバーアクションを呼び出すフォームハンドラ
+  // ★ 2. サーバーアクションを呼び出すフォームハンドラ (修正)
   const handleCreateRoom = async (formData: FormData) => {
-    // フォームをリセット
-    formRef.current?.reset()
-    
     // サーバーアクションを実行
     await createRoom(formData)
+    
+    // フォームをリセットし、モーダルを閉じる
+    setNewRoomName('')
+    setIsModalOpen(false)
   }
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
-      <h3 className="text-lg font-semibold">チャットルーム</h3>
       
-      {/* ★ 3. サーバーアクションを使うフォームに変更 */}
-      <form ref={formRef} action={handleCreateRoom} className="mt-4 flex space-x-2">
-        <input
-          type="text"
-          name="room_name" // ★ name 属性が重要
-          placeholder="New room..."
-          className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-        />
+      {/* ★ ヘッダー：「＋」ボタン */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">チャットルーム</h3>
         <button
-          type="submit"
-          className="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
+          onClick={() => setIsModalOpen(true)}
+          className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          title="Create new room"
         >
-          作成
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+          </svg>
         </button>
-      </form>
+      </div>
 
-      {/* ルーム一覧 (変更なし) */}
+      {/* ルーム一覧 */}
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto">
         {rooms.map((room) => {
           const isActive = pathname === `/room/${room.id}`
@@ -98,7 +96,8 @@ export default function RoomSidebar() {
             <Link
               key={room.id}
               href={`/room/${room.id}`}
-              className={`block rounded px-3 py-2 text-gray-700 dark:text-gray-300 ${
+              // ★ ホバーエフェクトにトランジションを追加
+              className={`block rounded px-3 py-2 text-gray-700 transition-colors duration-150 dark:text-gray-300 ${
                 isActive
                   ? 'bg-gray-200 dark:bg-gray-700' 
                   : 'hover:bg-gray-200 dark:hover:bg-gray-800' 
@@ -109,7 +108,57 @@ export default function RoomSidebar() {
           )
         })}
       </nav>
-      
+
+      {/* ★ 3. 新規ルーム作成モーダル */}
+      {isModalOpen && (
+        // オーバーレイ (背景)
+        <div 
+          className="fixed inset-0 z-10 flex items-center justify-center bg-black/50"
+          onClick={() => setIsModalOpen(false)} // 背景クリックで閉じる
+        >
+          {/* モーダル本体 */}
+          <div 
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()} // モーダル内クリックで閉じないように
+          >
+            <h2 className="text-xl font-semibold">新しいルームを作成</h2>
+            <form 
+              action={handleCreateRoom} // サーバーアクション を呼び出す
+              className="mt-4"
+            >
+              <label htmlFor="room_name" className="block text-sm font-medium">
+                ルーム名
+              </label>
+              <input
+                id="room_name"
+                name="room_name" // サーバーアクションが FormData で受け取るキー
+                type="text"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                placeholder="例: # general"
+                className="mt-1 block w-full rounded border border-gray-300 bg-white p-2 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                autoFocus // モーダルが開いたら自動でフォーカス
+              />
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button" // form の submit を発火させない
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  disabled={newRoomName.trim() === ''}
+                >
+                  作成
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
