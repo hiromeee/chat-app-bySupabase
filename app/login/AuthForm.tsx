@@ -30,7 +30,8 @@ export default function AuthForm() {
   }, [supabase, router])
 
   // ★ ダークモード対応のカスタムテーマ (型注釈を削除)
-  const customThemeVariables = { // ★ : Variables を削除
+  // TypeScriptは中身から型を自動で推論するため、ビルドは成功します。
+  const customThemeVariables = { 
     default: {
       colors: {
         brand: '#4f46e5',
