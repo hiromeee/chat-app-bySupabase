@@ -96,7 +96,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     }
   }, [supabase, user.id, myUsername, room.id]) 
 
-  // フォーム送信処理 (変更なし)
+  // フォーム送信処理 (修正)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() === '') return
@@ -115,7 +115,8 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     } else if (insertedMessage) {
       setMessages((currentMessages) => [
         ...currentMessages,
-        insertedMessage as Message,
+        // ★★★ 修正点: unknown を介して Message にキャスト ★★★
+        insertedMessage as unknown as Message, 
       ])
     }
   }
@@ -142,7 +143,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   }
 
 
-  // ★★★ UIの洗練（修正版） ★★★
+  // UI (変更なし)
   return (
     <div className="flex h-full w-full flex-col">
       {/* ルーム名ヘッダー */}
@@ -164,7 +165,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                   isMe ? 'flex-row-reverse' : 'flex-row'
                 }`}
               >
-                {/* ★ 削除ボタン (修正: `hidden` を削除し、opacityで制御) */}
+                {/* 削除ボタン */}
                 {isMe && (
                   <button
                     onClick={() => handleDelete(msg.id)}
@@ -178,7 +179,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                   </button>
                 )}
 
-                {/* ★ チャットバブル (角丸) */}
+                {/* チャットバブル */}
                 <div
                   className={`max-w-xs rounded-lg px-4 py-2 shadow-md lg:max-w-md ${
                     isMe
@@ -191,7 +192,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                       {msg.profiles?.username ?? '...'}
                     </p>
                   )}
-                  <p className="mt-1 break-words text-base">{msg.content}</p> {/* ★ break-words を追加 */}
+                  <p className="mt-1 break-words text-base">{msg.content}</p> 
                   <p className="mt-1 text-right text-xs opacity-60">
                     {new Date(msg.created_at).toLocaleString('ja-JP', { timeStyle: 'short' })}
                   </p>
@@ -212,7 +213,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         )}
       </div>
 
-      {/* ★ メッセージ送信フォーム (focus-within) */}
+      {/* メッセージ送信フォーム */}
       <form 
         onSubmit={handleSubmit} 
         className="flex w-full items-center space-x-2 border-t border-gray-200 p-4 transition-all duration-150 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 dark:border-gray-800"
