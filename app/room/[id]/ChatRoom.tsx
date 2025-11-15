@@ -103,20 +103,21 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     const messageContent = message
     setMessage('') 
 
-    const { data: insertedMessage, error } = await supabase
+    // ★★★ 修正点: single() を削除し、[Message] として扱う ★★★
+    const { data: insertedMessages, error } = await supabase
       .from('messages')
       .insert({ content: messageContent, user_id: user.id, room_id: room.id })
       .select(`id, content, created_at, user_id, profiles ( username )`) 
-      .single() 
-
+      // .single() // ← これを削除。常に配列として扱う
+    
     if (error) {
       console.error('Error sending message:', error)
       setMessage(messageContent) 
-    } else if (insertedMessage) {
+    } else if (insertedMessages && insertedMessages.length > 0) {
+      // 配列の最初の要素を Message 型として状態に追加する
       setMessages((currentMessages) => [
         ...currentMessages,
-        // ★★★ 修正点: unknown を介して Message にキャスト ★★★
-        insertedMessage as unknown as Message, 
+        insertedMessages[0] as Message, 
       ])
     }
   }
