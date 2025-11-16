@@ -147,9 +147,22 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       console.error('Error sending message:', error)
       setMessage(messageContent) 
     } else if (insertedMessage) {
+      // Supabase returns related rows as arrays for `profiles!inner`, normalize to the Message.profiles shape
+      const normalizedProfiles = Array.isArray((insertedMessage as any).profiles)
+        ? ((insertedMessage as any).profiles[0] ?? null)
+        : ((insertedMessage as any).profiles ?? null)
+
+      const normalizedMessage: Message = {
+        id: (insertedMessage as any).id,
+        content: (insertedMessage as any).content,
+        created_at: (insertedMessage as any).created_at,
+        user_id: (insertedMessage as any).user_id,
+        profiles: normalizedProfiles,
+      }
+
       setMessages((currentMessages) => [
         ...currentMessages,
-        insertedMessage as Message,
+        normalizedMessage,
       ])
     }
   }
