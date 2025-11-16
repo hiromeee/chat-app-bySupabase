@@ -12,27 +12,26 @@ type Room = {
   name: string
 }
 
-// ★ 1. Props の型を、中身が Promise であることを示すように変更
+// 1. Props の型を、中身が Promise であることを示すように変更
 type RoomPageProps = {
   params: Promise<{ id: string }>
 }
 
-// ★ 2. ページコンポーネントが "Props の Promise" を受け取る
+// 2. ページコンポーネントが "Props の Promise" を受け取る
 export default async function RoomPage(
   propsPromise: Promise<RoomPageProps> 
 ) {
   
-  // ★ 3. 外側の Promise を await して props オブジェクトを取り出す
+  // 3. 外側の Promise を await して props オブジェクトを取り出す
   const props = await propsPromise
   
-  // ★ 4. props.params の存在をチェック
+  // 4. props.params の存在をチェック
   if (!props || !props.params) {
-    console.error('--- [RoomPage] ERROR: props or props.params is missing. Redirecting to /')
     redirect('/')
     return; 
   }
   
-  // ★ 5. ★★★ 内側の Promise を await して params オブジェクトを取り出す ★★★
+  // 5. 内側の Promise を await して params オブジェクトを取り出す
   const params = await props.params;
   
   // 6. params.id を数値に変換
@@ -40,7 +39,6 @@ export default async function RoomPage(
 
   // 7. 変換後のIDが数値でない場合
   if (isNaN(roomId)) {
-    console.error('--- [RoomPage] ERROR: roomId is NaN. Redirecting to /')
     redirect('/')
     return; 
   }
@@ -53,7 +51,6 @@ export default async function RoomPage(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    console.warn('--- [RoomPage] WARN: No user found. Redirecting to /login')
     redirect('/login')
   }
 
@@ -65,18 +62,14 @@ export default async function RoomPage(
     .single()
 
   // 10. ルームの情報を取得
-  const { data: room, error: roomError } = await supabase
+  const { data: room } = await supabase
     .from('rooms')
     .select('id, name')
     .eq('id', roomId) // ★ 数値の roomId で検索
     .single()
   
-  if (roomError) {
-    console.error('--- [RoomPage] Room query ERROR:', roomError.message)
-  }
-
   if (!room) {
-    console.warn(`--- [RoomPage] WARN: Room not found (id: ${roomId}). Redirecting to /`)
+    // ルームが存在しない場合はトップにリダイレクト
     redirect('/')
   }
 
@@ -88,8 +81,8 @@ export default async function RoomPage(
       content,
       created_at,
       user_id,
-      profiles ( username )
-    `)
+      profiles!inner ( username )
+    `) // ★ 変更: profiles!inner ( username )
     .eq('room_id', roomId) // ★ 数値の roomId で検索
     .order('created_at', { ascending: true })
 
