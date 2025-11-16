@@ -91,14 +91,13 @@ export default async function RoomPage(
     <ChatRoom 
       user={user} 
       profile={profile as Profile}
-      initialMessages={(initialMessages || []).map((m: any) => ({
-        id: m.id,
-        content: m.content,
-        created_at: m.created_at,
-        user_id: m.user_id,
-        // Convert profiles array (returned by the query) to a single object or null to match Message type
-        profiles: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles ?? null,
-      }))} 
+      initialMessages={
+        (initialMessages || []).map((m: any) => ({
+          ...m,
+          // Supabase join with profiles!inner returns an array; normalize to a single object or null
+          profiles: Array.isArray(m.profiles) ? (m.profiles[0] ?? null) : m.profiles,
+        }))
+      } 
       room={room as Room} 
     />
   )

@@ -1,6 +1,6 @@
 'use client' 
 
-import { createClient } from '@/utils/supabase/client' //
+import { createClient } from '@/utils/supabase/client'
 import { useState, useEffect, useRef } from 'react' 
 import type { User } from '@supabase/supabase-js'
 
@@ -19,7 +19,7 @@ type Message = {
 type Profile = {
   username: string | null
 }
-type Room = { // ★ Room の型
+type Room = {
   id: number
   name: string
 }
@@ -28,15 +28,14 @@ type UserPresence = {
   status: 'online' | 'typing'
 }
 
-// Propsの型 (room を追加)
+// Propsの型
 type ChatRoomProps = {
   user: User
   profile: Profile
   initialMessages: Message[] 
-  room: Room // ★ room を受け取る
+  room: Room 
 }
 
-// ★ ファイル名を ChatClient から ChatRoom に変更
 export default function ChatRoom({ user, profile, initialMessages, room }: ChatRoomProps) {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState(initialMessages)
@@ -45,16 +44,15 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const myUsername = profile?.username ?? user.email ?? 'Unknown User'
 
-  // スクロール処理 (変更なし)
+  // スクロール処理
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
 
-  // ★★★ リアルタイム購読 (ルームIDでフィルタリング) ★★★
+  // リアルタイム購読
   useEffect(() => {
     
-    // ★ チャンネル名をルーム固有のものに変更
     const channelName = `room-${room.id}`
     const channel = supabase.channel(channelName)
 
@@ -84,13 +82,13 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         event: 'INSERT', 
         schema: 'public', 
         table: 'messages',
-        filter: `room_id=eq.${room.id}` // ★ このルームのメッセージのみ購読
+        filter: `room_id=eq.${room.id}` 
       }, handleNewMessage)
       .on('postgres_changes', { 
         event: 'DELETE', 
         schema: 'public', 
         table: 'messages',
-        filter: `room_id=eq.${room.id}` // ★ このルームの削除のみ購読
+        filter: `room_id=eq.${room.id}` 
       }, handleDeleteMessage)
 
     // 4. Presence (在室状況) の設定
@@ -119,11 +117,10 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       channel.untrack()
       supabase.removeChannel(channel)
     }
-  }, [supabase, user.id, myUsername, room.id]) // ★ 依存配列に room.id を追加
-  // ★★★ 修正ここまで ★★★
+  }, [supabase, user.id, myUsername, room.id]) 
 
 
-  // ★★★ フォーム送信処理 (room_id を追加) ★★★
+  // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() === '') return
@@ -135,7 +132,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       .insert({ 
         content: messageContent, 
         user_id: user.id,
-        room_id: room.id // ★ どのルームへの投稿かIDを追加
+        room_id: room.id 
       })
       .select(`
         id, 
@@ -157,7 +154,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     }
   }
 
-  // 削除実行処理 (変更なし)
+  // 削除実行処理
   const handleDelete = async (messageId: number) => {
     setMessages((currentMessages) => 
       currentMessages.filter((msg) => msg.id !== messageId)
@@ -171,7 +168,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
 
   // 「入力中」状態を通知する関数
   const handleTyping = (status: 'typing' | 'online') => {
-    // ★ チャンネル名をルーム固有のものに変更
     const channel = supabase.channel(`room-${room.id}`)
     channel.track({
       username: myUsername,
@@ -179,10 +175,10 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     })
   }
 
-  // ★ UI (H1 にルーム名を表示)
+  // UI
   return (
-    <div className="flex h-full w-full flex-col"> {/* ★ 高さを h-full に変更 */}
-      {/* ★ ルーム名ヘッダー */}
+    <div className="flex h-full w-full flex-col"> 
+      {/* ルーム名ヘッダー */}
       <div className="border-b border-gray-200 p-4 dark:border-gray-800">
         <h1 className="text-xl font-bold"># {room.name}</h1>
       </div>
@@ -202,7 +198,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                 className="hidden rounded-full p-1 text-gray-400 opacity-50 hover:bg-gray-200 hover:text-red-500 group-hover:block dark:hover:bg-gray-800"
                 title="Delete"
               >
-                {/* SVGアイコン (変更なし) */}
+                {/* SVGアイコン */}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
                   <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
@@ -231,7 +227,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 「入力中...」表示エリア (変更なし) */}
+      {/* 「入力中...」表示エリア */}
       <div className="h-6 px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">
         {typingUsers.length > 0 && (
           <span>
@@ -240,7 +236,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         )}
       </div>
 
-      {/* メッセージ送信フォーム (変更なし) */}
+      {/* メッセージ送信フォーム */}
       <form 
         onSubmit={handleSubmit} 
         className="flex w-full items-center space-x-2 border-t border-gray-200 p-4 dark:border-gray-800"
