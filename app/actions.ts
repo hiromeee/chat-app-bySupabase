@@ -1,25 +1,26 @@
-'use server' // サーバーアクションの宣言
+'use server'
 
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache' // キャッシュを更新する関数
+import { revalidatePath } from 'next/cache'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
+// ルーム作成アクション
 export async function createRoom(formData: FormData) {
   const roomName = formData.get('room_name') as string
 
   if (roomName.trim() === '') {
-    return // 何もしない
+    return
   }
 
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
 
-  // 1. 新しいルームをDBに挿入
   const { data: newRoom, error } = await supabase
     .from('rooms')
     .insert({ name: roomName })
-    .select('id') // 新しく作成されたルームのIDだけ取得
+    .select('id')
     .single()
 
   if (error) {
@@ -27,13 +28,11 @@ export async function createRoom(formData: FormData) {
     return
   }
 
-  // 2. サイドバーのキャッシュを更新
-  revalidatePath('/room') // /room/[id] ページと / (レイアウト) を再検証
-
-  // 3. 新しいルームにリダイレクト
+  revalidatePath('/room')
   redirect(`/room/${newRoom.id}`)
 }
 
+// ダイレクトチャット開始アクション
 export async function startDirectChat(targetUserId: string) {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
@@ -42,7 +41,6 @@ export async function startDirectChat(targetUserId: string) {
   if (!user) return
 
   // 1. 既存のDMがあるか確認
-  // 自分の参加しているルームIDを取得
   const { data: myRooms } = await supabase
     .from('room_participants')
     .select('room_id')
@@ -51,7 +49,6 @@ export async function startDirectChat(targetUserId: string) {
   if (myRooms && myRooms.length > 0) {
     const myRoomIds = myRooms.map(r => r.room_id)
     
-    // 相手も参加していて、かつ is_group = false のルームを探す
     const { data: commonRooms } = await supabase
       .from('room_participants')
       .select('room_id, rooms!inner(is_group)')
@@ -62,7 +59,6 @@ export async function startDirectChat(targetUserId: string) {
       
     if (commonRooms && commonRooms.length > 0) {
       redirect(`/room/${commonRooms[0].room_id}`)
-      return
     }
   }
 
@@ -93,4 +89,64 @@ export async function startDirectChat(targetUserId: string) {
 
   revalidatePath('/room')
   redirect(`/room/${newRoom.id}`)
+}
+
+// AIへのメッセージ送信アクション（日時認識機能付き）
+export async function sendMessageToAI(messageContent: string, roomId: number) {
+  try {
+    // 環境変数からAPIキーを取得
+    const apiKey = process.env.GEMINI_API_KEY
+    
+    // ★環境変数が読み込めない場合の予備（必要ならコメントを外してキーを入れてください）
+    // const apiKey = "ここにAPIキー" 
+
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY is not set')
+      return
+    }
+
+    // 1. Geminiの初期化
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+
+    // 2. 現在時刻を取得（日本時間）
+    const now = new Date().toLocaleString('ja-JP', { 
+      timeZone: 'Asia/Tokyo',
+      dateStyle: 'full',
+      timeStyle: 'medium'
+    })
+
+    // 3. AIへの指示書（システムプロンプト）を作成
+    const promptWithContext = `
+Instructions:
+- あなたはチャットアプリの優秀なAIアシスタントです。
+- 現在の日時は【 ${now} 】です。ユーザーから日付や時刻を聞かれたら、この時間を基準に答えてください。
+- 常に丁寧かつフレンドリーな日本語で返答してください。
+
+User message:
+${messageContent}
+    `.trim()
+
+    // 4. AIに回答を生成させる
+    const result = await model.generateContent(promptWithContext)
+    const response = await result.response
+    const aiText = response.text()
+
+    // 5. SupabaseにAIの回答を保存する
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
+    
+    const { error } = await supabase.from('messages').insert({
+      content: aiText,
+      room_id: roomId,
+      user_id: '00000000-0000-0000-0000-000000000000'
+    })
+
+    if (error) {
+      console.error('Supabase Insert Error (AI):', error)
+    }
+
+  } catch (error) {
+    console.error('AI Action Error:', error)
+  }
 }

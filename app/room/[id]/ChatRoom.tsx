@@ -1,6 +1,7 @@
 'use client' 
 
 import { createClient } from '@/utils/supabase/client'
+import { sendMessageToAI } from '@/app/actions'
 import { useState, useEffect, useRef } from 'react' 
 import type { User } from '@supabase/supabase-js'
 
@@ -181,7 +182,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         created_at, 
         user_id, 
         profiles!inner ( username )
-      `) // ★ 変更: profiles!inner ( username )
+      `) 
       .single() 
 
     if (error) {
@@ -189,7 +190,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       setMessage(messageContent) 
       setPendingImageUrl(imageUrlToSend)
     } else if (insertedMessage) {
-      // Supabase returns related rows as arrays for `profiles!inner`, normalize to the Message.profiles shape
       const normalizedProfiles = Array.isArray((insertedMessage as any).profiles)
         ? ((insertedMessage as any).profiles[0] ?? null)
         : ((insertedMessage as any).profiles ?? null)
@@ -207,6 +207,12 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         ...currentMessages,
         normalizedMessage,
       ])
+
+      // ★ AI呼び出しロジック
+      if (messageContent.includes('@ai')) {
+        // Server Actionを呼び出し (非同期で実行、完了を待たずにUIは更新)
+        sendMessageToAI(messageContent, room.id)
+      }
     }
   }
 
@@ -248,18 +254,17 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
               msg.user_id === user.id ? 'flex-row-reverse' : 'flex-row'
             }`}
           >
-            {/* Avatar for others */}
+            {/* 他人のアイコン */}
             {msg.user_id !== user.id && (
               <div className="flex flex-col items-center">
                 <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-                   {/* Placeholder or profile image */}
                    <span className="text-xs font-bold text-gray-600">{msg.profiles?.username?.[0]?.toUpperCase() ?? '?'}</span>
                 </div>
               </div>
             )}
 
             <div className={`flex flex-col ${msg.user_id === user.id ? 'items-end' : 'items-start'}`}>
-                {/* Username for others (optional, LINE usually shows it above bubble in group, but for DM maybe not needed? Let's keep it small) */}
+                {/* 他人の名前 */}
                 {msg.user_id !== user.id && (
                   <span className="mb-1 text-xs text-white opacity-80">
                     {msg.profiles?.username ?? 'Unknown'}
@@ -267,19 +272,19 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                 )}
 
                 <div className="flex items-end gap-1">
-                    {/* Timestamp for Me (Left of bubble) */}
+                    {/* 自分のメッセージ時刻 (左側) */}
                     {msg.user_id === user.id && (
                         <span className="text-[10px] text-white opacity-70 mb-1">
                             {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                     )}
 
-                    {/* Bubble */}
+                    {/* 吹き出し */}
                     <div
                       className={`max-w-xs rounded-2xl px-4 py-2 shadow-sm lg:max-w-md relative ${
                         msg.user_id === user.id
-                          ? 'bg-[#06c755] text-white rounded-tr-none' // Green for me
-                          : 'bg-white text-gray-900 rounded-tl-none' // White for others
+                          ? 'bg-[#06c755] text-white rounded-tr-none' // 自分: 緑
+                          : 'bg-white text-gray-900 rounded-tl-none' // 他人: 白
                       }`}
                     >
                       {msg.image_url && (
@@ -295,7 +300,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                       {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
                     </div>
 
-                     {/* Timestamp for Others (Right of bubble) */}
+                     {/* 他人のメッセージ時刻 (右側) */}
                      {msg.user_id !== user.id && (
                         <span className="text-[10px] text-white opacity-70 mb-1">
                             {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
@@ -304,7 +309,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                 </div>
             </div>
             
-            {/* Delete button (only for me) */}
+            {/* 削除ボタン (自分のみ) */}
             {msg.user_id === user.id && (
               <button
                 onClick={() => handleDelete(msg.id)}
