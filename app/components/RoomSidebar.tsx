@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation' 
 import { useState, useEffect, useRef } from 'react' 
-import { createRoom } from '../actions' // サーバーアクション
+import { createRoom, startDirectChat } from '../actions' // サーバーアクション
 
 // ルームの型定義
 type Room = {
@@ -29,6 +29,7 @@ export default function RoomSidebar() {
       const { data, error } = await supabase
         .from('rooms')
         .select('id, name')
+        .eq('is_group', true) // Only fetch group rooms for the main list
         .order('created_at', { ascending: true })
       
       if (error) {
@@ -43,7 +44,7 @@ export default function RoomSidebar() {
       .channel('rooms-channel') 
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'rooms' },
+        { event: 'INSERT', schema: 'public', table: 'rooms', filter: 'is_group=eq.true' },
         (payload) => {
           setRooms((currentRooms) => {
             if (currentRooms.find(room => room.id === payload.new.id)) {
@@ -70,6 +71,24 @@ export default function RoomSidebar() {
     setNewRoomName('')
     setIsModalOpen(false)
   }
+
+  // 3. ユーザー一覧を取得
+  const [users, setUsers] = useState<any[]>([])
+  useEffect(() => {
+    const fetchUsers = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .neq('id', user.id)
+        .limit(20) // Limit for now
+      
+      setUsers(data || [])
+    }
+    fetchUsers()
+  }, [supabase])
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -107,6 +126,27 @@ export default function RoomSidebar() {
             </Link>
           )
         })}
+
+        {/* DM Section */}
+        <div className="mt-8">
+          <h3 className="mb-2 px-2 text-xs font-semibold uppercase text-gray-500">ダイレクトメッセージ</h3>
+          <div className="space-y-1">
+            {users.map((user) => (
+              <button
+                key={user.id}
+                onClick={async () => {
+                  await startDirectChat(user.id)
+                }}
+                className="block w-full rounded px-3 py-2 text-left text-gray-700 transition-colors duration-150 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span>{user.username || 'Unknown'}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       </nav>
 
       {/* ★ 3. 新規ルーム作成モーダル */}

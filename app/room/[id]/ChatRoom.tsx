@@ -1,4 +1,3 @@
-
 'use client' 
 
 import { createClient } from '@/utils/supabase/client'
@@ -241,54 +240,84 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       </div>
 
       {/* メッセージ表示エリア */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4 bg-[#7297b9]">
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`group flex items-center gap-2 ${
+            className={`group flex items-end gap-2 ${
               msg.user_id === user.id ? 'flex-row-reverse' : 'flex-row'
             }`}
           >
+            {/* Avatar for others */}
+            {msg.user_id !== user.id && (
+              <div className="flex flex-col items-center">
+                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                   {/* Placeholder or profile image */}
+                   <span className="text-xs font-bold text-gray-600">{msg.profiles?.username?.[0]?.toUpperCase() ?? '?'}</span>
+                </div>
+              </div>
+            )}
+
+            <div className={`flex flex-col ${msg.user_id === user.id ? 'items-end' : 'items-start'}`}>
+                {/* Username for others (optional, LINE usually shows it above bubble in group, but for DM maybe not needed? Let's keep it small) */}
+                {msg.user_id !== user.id && (
+                  <span className="mb-1 text-xs text-white opacity-80">
+                    {msg.profiles?.username ?? 'Unknown'}
+                  </span>
+                )}
+
+                <div className="flex items-end gap-1">
+                    {/* Timestamp for Me (Left of bubble) */}
+                    {msg.user_id === user.id && (
+                        <span className="text-[10px] text-white opacity-70 mb-1">
+                            {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    )}
+
+                    {/* Bubble */}
+                    <div
+                      className={`max-w-xs rounded-2xl px-4 py-2 shadow-sm lg:max-w-md relative ${
+                        msg.user_id === user.id
+                          ? 'bg-[#06c755] text-white rounded-tr-none' // Green for me
+                          : 'bg-white text-gray-900 rounded-tl-none' // White for others
+                      }`}
+                    >
+                      {msg.image_url && (
+                        <div className="mb-1">
+                          <img 
+                            src={msg.image_url} 
+                            alt="Sent image" 
+                            className="max-w-[200px] rounded-lg object-cover"
+                            style={{ maxHeight: '300px' }}
+                          />
+                        </div>
+                      )}
+                      {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
+                    </div>
+
+                     {/* Timestamp for Others (Right of bubble) */}
+                     {msg.user_id !== user.id && (
+                        <span className="text-[10px] text-white opacity-70 mb-1">
+                            {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    )}
+                </div>
+            </div>
+            
+            {/* Delete button (only for me) */}
             {msg.user_id === user.id && (
               <button
                 onClick={() => handleDelete(msg.id)}
-                className="hidden rounded-full p-1 text-gray-400 opacity-50 hover:bg-gray-200 hover:text-red-500 group-hover:block dark:hover:bg-gray-800"
+                className="hidden rounded-full p-1 text-white opacity-50 hover:bg-black/20 group-hover:block"
                 title="Delete"
               >
-                {/* SVGアイコン */}
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
                   <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
                 </svg>
               </button>
             )}
-            <div
-              className={`max-w-xs rounded-lg px-4 py-2 shadow-md lg:max-w-md ${
-                msg.user_id === user.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white'
-              }`}
-            >
-              {msg.user_id !== user.id && (
-                <p className="text-xs font-semibold opacity-80">
-                  {msg.profiles?.username ?? '...'}
-                </p>
-              )}
-              {msg.image_url && (
-                <div className="mb-1">
-                  <img 
-                    src={msg.image_url} 
-                    alt="Sent image" 
-                    className="max-w-[200px] rounded-lg object-cover"
-                    style={{ maxHeight: '300px' }}
-                  />
-                </div>
-              )}
-              {msg.content && <p className="mt-1 text-base">{msg.content}</p>}
-              <p className="mt-1 text-right text-xs opacity-60">
-                {new Date(msg.created_at).toLocaleString('ja-JP', { timeStyle: 'short' })}
-              </p>
-            </div>
+
           </div>
         ))}
         <div ref={messagesEndRef} />

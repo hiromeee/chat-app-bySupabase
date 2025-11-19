@@ -62,15 +62,31 @@ export default async function RoomPage(
     .single()
 
   // 10. ルームの情報を取得
-  const { data: room } = await supabase
+  const { data: roomData } = await supabase
     .from('rooms')
-    .select('id, name')
-    .eq('id', roomId) // ★ 数値の roomId で検索
+    .select('id, name, is_group')
+    .eq('id', roomId)
     .single()
   
-  if (!room) {
-    // ルームが存在しない場合はトップにリダイレクト
+  if (!roomData) {
     redirect('/')
+  }
+
+  let room = roomData as any
+
+  // DMの場合、相手の名前をルーム名にする
+  if (room.is_group === false) {
+    const { data: partner } = await supabase
+      .from('room_participants')
+      .select('profiles(username)')
+      .eq('room_id', room.id)
+      .neq('user_id', user.id)
+      .single()
+    
+    if (partner && partner.profiles) {
+      // @ts-ignore
+      room.name = partner.profiles.username || 'Unknown User'
+    }
   }
 
   // 11. 初期メッセージを取得
@@ -79,11 +95,12 @@ export default async function RoomPage(
     .select(`
       id,
       content,
+      image_url,
       created_at,
       user_id,
       profiles!inner ( username )
-    `) // ★ 変更: profiles!inner ( username )
-    .eq('room_id', roomId) // ★ 数値の roomId で検索
+    `)
+    .eq('room_id', roomId)
     .order('created_at', { ascending: true })
 
   // 12. クライアントコンポーネントに渡す
