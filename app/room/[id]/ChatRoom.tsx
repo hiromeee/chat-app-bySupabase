@@ -1,3 +1,4 @@
+
 'use client' 
 
 import { createClient } from '@/utils/supabase/client'
@@ -10,6 +11,7 @@ const supabase = createClient()
 type Message = {
   id: number
   content: string
+  image_url: string | null
   created_at: string
   user_id: string
   profiles: {
@@ -40,8 +42,11 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState(initialMessages)
   const [typingUsers, setTypingUsers] = useState<string[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const myUsername = profile?.username ?? user.email ?? 'Unknown User'
 
   // スクロール処理
@@ -120,23 +125,60 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   }, [supabase, user.id, myUsername, room.id]) 
 
 
+  // 画像アップロード処理
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+    
+    const file = e.target.files[0]
+    setIsUploading(true)
+
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file)
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath)
+      setPendingImageUrl(data.publicUrl)
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      alert('画像のアップロードに失敗しました')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (message.trim() === '') return
+    if (message.trim() === '' && !pendingImageUrl) return
+    
     const messageContent = message
+    const imageUrlToSend = pendingImageUrl
+    
     setMessage('') 
+    setPendingImageUrl(null)
+    if (fileInputRef.current) fileInputRef.current.value = '' 
 
     const { data: insertedMessage, error } = await supabase
       .from('messages')
       .insert({ 
         content: messageContent, 
+        image_url: imageUrlToSend,
         user_id: user.id,
         room_id: room.id 
       })
       .select(`
         id, 
         content, 
+        image_url,
         created_at, 
         user_id, 
         profiles!inner ( username )
@@ -146,6 +188,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     if (error) {
       console.error('Error sending message:', error)
       setMessage(messageContent) 
+      setPendingImageUrl(imageUrlToSend)
     } else if (insertedMessage) {
       // Supabase returns related rows as arrays for `profiles!inner`, normalize to the Message.profiles shape
       const normalizedProfiles = Array.isArray((insertedMessage as any).profiles)
@@ -155,6 +198,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       const normalizedMessage: Message = {
         id: (insertedMessage as any).id,
         content: (insertedMessage as any).content,
+        image_url: (insertedMessage as any).image_url,
         created_at: (insertedMessage as any).created_at,
         user_id: (insertedMessage as any).user_id,
         profiles: normalizedProfiles,
@@ -230,7 +274,17 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                   {msg.profiles?.username ?? '...'}
                 </p>
               )}
-              <p className="mt-1 text-base">{msg.content}</p>
+              {msg.image_url && (
+                <div className="mb-1">
+                  <img 
+                    src={msg.image_url} 
+                    alt="Sent image" 
+                    className="max-w-[200px] rounded-lg object-cover"
+                    style={{ maxHeight: '300px' }}
+                  />
+                </div>
+              )}
+              {msg.content && <p className="mt-1 text-base">{msg.content}</p>}
               <p className="mt-1 text-right text-xs opacity-60">
                 {new Date(msg.created_at).toLocaleString('ja-JP', { timeStyle: 'short' })}
               </p>
@@ -255,6 +309,43 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         className="flex w-full items-center space-x-2 border-t border-gray-200 p-4 dark:border-gray-800"
       >
         <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleImageSelect}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+          disabled={isUploading}
+        >
+          {isUploading ? (
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+        
+        {pendingImageUrl && (
+          <div className="relative h-10 w-10">
+            <img src={pendingImageUrl} alt="Preview" className="h-full w-full rounded object-cover" />
+            <button
+              type="button"
+              onClick={() => setPendingImageUrl(null)}
+              className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <input
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -266,7 +357,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         <button 
           type="submit" 
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          disabled={message.trim() === ''}
+          disabled={message.trim() === '' && !pendingImageUrl}
         >
           Send
         </button>
