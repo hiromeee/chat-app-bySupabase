@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link' 
 import RoomSidebar from './components/RoomSidebar'
+import HelpModal from './components/HelpModal'
 
 async function signOut() {
   'use server' 
@@ -40,6 +41,7 @@ export default async function RootLayout({ children }) {
             
             {session && (
               <div className="flex items-center gap-4">
+                <HelpModal />
                 <Link href="/profile" className="text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors">
                   Profile
                 </Link>
