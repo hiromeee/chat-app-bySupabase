@@ -44,6 +44,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null)
+  const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -204,7 +205,16 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     }
   }
 
-  const handleDelete = async (messageId: number) => {
+  const confirmDelete = (messageId: number) => {
+    setDeletingMessageId(messageId)
+  }
+
+  const handleDelete = async () => {
+    if (deletingMessageId === null) return
+
+    const messageId = deletingMessageId
+    setDeletingMessageId(null) // Close modal immediately
+
     setMessages((currentMessages) => 
       currentMessages.filter((msg) => msg.id !== messageId)
     )
@@ -301,8 +311,8 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                         {/* Actions (Delete) */}
                         {isMe && (
                             <button
-                                onClick={() => handleDelete(msg.id)}
-                                className="absolute -left-8 top-1/2 -translate-y/2 opacity-0 transition-opacity group-hover/bubble:opacity-100 text-slate-400 hover:text-red-500"
+                                onClick={() => confirmDelete(msg.id)}
+                                className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/bubble:opacity-100 text-slate-400 hover:text-red-500"
                                 title="Delete"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -390,6 +400,38 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
             </button>
           </form>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deletingMessageId !== null && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm p-4"
+          onClick={() => setDeletingMessageId(null)}
+        >
+          <div 
+            className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">メッセージを送信を取り消しますか？</h3>
+                
+                <div className="mt-8 flex flex-col gap-3">
+                    <button
+                        onClick={handleDelete}
+                        className="w-full rounded-xl bg-red-500 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-600 transition-colors"
+                    >
+                        送信取消
+                    </button>
+                    <button
+                        onClick={() => setDeletingMessageId(null)}
+                        className="w-full rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        閉じる
+                    </button>
+                </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
