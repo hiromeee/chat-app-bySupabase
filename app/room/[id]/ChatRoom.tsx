@@ -49,19 +49,16 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   const fileInputRef = useRef<HTMLInputElement>(null)
   const myUsername = profile?.username ?? user.email ?? 'Unknown User'
 
-  // スクロール処理
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
 
-  // リアルタイム購読
   useEffect(() => {
     
     const channelName = `room-${room.id}`
     const channel = supabase.channel(channelName)
 
-    // 1. 新規メッセージ (INSERT) の処理
     const handleNewMessage = async (payload: any) => {
       const newMessage = payload.new as Message
       if (newMessage.user_id === user.id) return
@@ -76,12 +73,10 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       setMessages((current) => current.find((m) => m.id === newMessage.id) ? current : [...current, newMessage])
     }
 
-    // 2. 削除メッセージ (DELETE) の処理
     const handleDeleteMessage = (payload: any) => {
       setMessages((current) => current.filter((msg) => msg.id !== payload.old.id))
     }
     
-    // 3. リアルタイムチャンネルの設定 (DB変更)
     channel
       .on('postgres_changes', { 
         event: 'INSERT', 
@@ -96,7 +91,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         filter: `room_id=eq.${room.id}` 
       }, handleDeleteMessage)
 
-    // 4. Presence (在室状況) の設定
       .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState<UserPresence>()
         const typingUsernames = Object.keys(newState)
@@ -107,7 +101,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         setTypingUsers(typingUsernames)
       })
 
-    // 5. チャンネル購読 (subscribe)
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
@@ -117,7 +110,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         }
       })
 
-    // 6. クリーンアップ
     return () => {
       channel.untrack()
       supabase.removeChannel(channel)
@@ -125,7 +117,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   }, [supabase, user.id, myUsername, room.id]) 
 
 
-  // 画像アップロード処理
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return
     
@@ -149,13 +140,12 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
       setPendingImageUrl(data.publicUrl)
     } catch (error) {
       console.error('Error uploading image:', error)
-      alert('画像のアップロードに失敗しました')
+      alert('Error uploading image')
     } finally {
       setIsUploading(false)
     }
   }
 
-  // フォーム送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() === '' && !pendingImageUrl) return
@@ -208,15 +198,12 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         normalizedMessage,
       ])
 
-      // ★ AI呼び出しロジック
       if (messageContent.includes('@ai')) {
-        // Server Actionを呼び出し (非同期で実行、完了を待たずにUIは更新)
         sendMessageToAI(messageContent, room.id)
       }
     }
   }
 
-  // 削除実行処理
   const handleDelete = async (messageId: number) => {
     setMessages((currentMessages) => 
       currentMessages.filter((msg) => msg.id !== messageId)
@@ -228,7 +215,6 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     }
   }
 
-  // 「入力中」状態を通知する関数
   const handleTyping = (status: 'typing' | 'online') => {
     const channel = supabase.channel(`room-${room.id}`)
     channel.track({
@@ -237,165 +223,173 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     })
   }
 
-  // UI
   return (
     <div className="flex h-full w-full flex-col"> 
-      {/* ルーム名ヘッダー */}
-      <div className="border-b border-gray-200 p-4 dark:border-gray-800">
-        <h1 className="text-xl font-bold"># {room.name}</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-white/20 bg-white/40 p-4 backdrop-blur-md dark:bg-slate-900/40">
+        <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+                <span className="text-lg font-bold">#</span>
+            </div>
+            <div>
+                <h1 className="text-lg font-bold text-slate-900 dark:text-white">{room.name}</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {typingUsers.length > 0 ? (
+                        <span className="text-indigo-500 font-medium animate-pulse">
+                            {typingUsers.join(', ')} is typing...
+                        </span>
+                    ) : (
+                        'Active now'
+                    )}
+                </p>
+            </div>
+        </div>
       </div>
 
-      {/* メッセージ表示エリア */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-4 bg-[#7297b9]">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`group flex items-end gap-2 ${
-              msg.user_id === user.id ? 'flex-row-reverse' : 'flex-row'
-            }`}
-          >
-            {/* 他人のアイコン */}
-            {msg.user_id !== user.id && (
-              <div className="flex flex-col items-center">
-                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-                   <span className="text-xs font-bold text-gray-600">{msg.profiles?.username?.[0]?.toUpperCase() ?? '?'}</span>
-                </div>
-              </div>
-            )}
-
-            <div className={`flex flex-col ${msg.user_id === user.id ? 'items-end' : 'items-start'}`}>
-                {/* 他人の名前 */}
-                {msg.user_id !== user.id && (
-                  <span className="mb-1 text-xs text-white opacity-80">
-                    {msg.profiles?.username ?? 'Unknown'}
-                  </span>
+      {/* Messages Area */}
+      <div className="flex-1 space-y-6 overflow-y-auto p-6 scroll-smooth">
+        {messages.map((msg, index) => {
+            const isMe = msg.user_id === user.id;
+            const showAvatar = !isMe && (index === 0 || messages[index - 1].user_id !== msg.user_id);
+            
+            return (
+              <div
+                key={msg.id}
+                className={`group flex items-end gap-3 ${
+                  isMe ? 'flex-row-reverse' : 'flex-row'
+                }`}
+              >
+                {/* Avatar */}
+                {!isMe && (
+                  <div className={`flex-shrink-0 w-8 ${!showAvatar ? 'invisible' : ''}`}>
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-pink-400 to-rose-400 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                       {msg.profiles?.username?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                  </div>
                 )}
 
-                <div className="flex items-end gap-1">
-                    {/* 自分のメッセージ時刻 (左側) */}
-                    {msg.user_id === user.id && (
-                        <span className="text-[10px] text-white opacity-70 mb-1">
-                            {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
+                    {/* Username */}
+                    {!isMe && showAvatar && (
+                      <span className="mb-1 ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        {msg.profiles?.username ?? 'Unknown'}
+                      </span>
                     )}
 
-                    {/* 吹き出し */}
-                    <div
-                      className={`max-w-xs rounded-2xl px-4 py-2 shadow-sm lg:max-w-md relative ${
-                        msg.user_id === user.id
-                          ? 'bg-[#06c755] text-white rounded-tr-none' // 自分: 緑
-                          : 'bg-white text-gray-900 rounded-tl-none' // 他人: 白
-                      }`}
-                    >
-                      {msg.image_url && (
-                        <div className="mb-1">
-                          <img 
-                            src={msg.image_url} 
-                            alt="Sent image" 
-                            className="max-w-[200px] rounded-lg object-cover"
-                            style={{ maxHeight: '300px' }}
-                          />
+                    <div className="relative group/bubble">
+                        {/* Bubble */}
+                        <div
+                          className={`relative px-5 py-3 shadow-sm ${
+                            isMe
+                              ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-sm' 
+                              : 'bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100 rounded-2xl rounded-tl-sm' 
+                          }`}
+                        >
+                          {msg.image_url && (
+                            <div className="mb-2 overflow-hidden rounded-lg">
+                              <img 
+                                src={msg.image_url} 
+                                alt="Sent image" 
+                                className="max-w-full object-cover transition-transform hover:scale-105"
+                                style={{ maxHeight: '300px' }}
+                              />
+                            </div>
+                          )}
+                          {msg.content && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>}
                         </div>
-                      )}
-                      {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
+                        
+                        {/* Actions (Delete) */}
+                        {isMe && (
+                            <button
+                                onClick={() => handleDelete(msg.id)}
+                                className="absolute -left-8 top-1/2 -translate-y/2 opacity-0 transition-opacity group-hover/bubble:opacity-100 text-slate-400 hover:text-red-500"
+                                title="Delete"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
-
-                     {/* 他人のメッセージ時刻 (右側) */}
-                     {msg.user_id !== user.id && (
-                        <span className="text-[10px] text-white opacity-70 mb-1">
-                            {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                    )}
+                    
+                    {/* Timestamp */}
+                    <span className={`mt-1 text-[10px] text-slate-400 ${isMe ? 'mr-1' : 'ml-1'}`}>
+                        {new Date(msg.created_at).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                 </div>
-            </div>
-            
-            {/* 削除ボタン (自分のみ) */}
-            {msg.user_id === user.id && (
-              <button
-                onClick={() => handleDelete(msg.id)}
-                className="hidden rounded-full p-1 text-white opacity-50 hover:bg-black/20 group-hover:block"
-                title="Delete"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                  <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
-                  <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
-                </svg>
-              </button>
-            )}
-
-          </div>
-        ))}
+              </div>
+            )
+        })}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 「入力中...」表示エリア */}
-      <div className="h-6 px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">
-        {typingUsers.length > 0 && (
-          <span>
-            {typingUsers.join(', ')} {typingUsers.length > 1 ? 'が' : 'が'}入力中...
-          </span>
-        )}
-      </div>
-
-      {/* メッセージ送信フォーム */}
-      <form 
-        onSubmit={handleSubmit} 
-        className="flex w-full items-center space-x-2 border-t border-gray-200 p-4 dark:border-gray-800"
-      >
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          ref={fileInputRef}
-          onChange={handleImageSelect}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-          disabled={isUploading}
-        >
-          {isUploading ? (
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          )}
-        </button>
-        
-        {pendingImageUrl && (
-          <div className="relative h-10 w-10">
-            <img src={pendingImageUrl} alt="Preview" className="h-full w-full rounded object-cover" />
+      {/* Input Area */}
+      <div className="p-4 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border-t border-white/20 dark:border-slate-800/50">
+          <form 
+            onSubmit={handleSubmit} 
+            className="flex items-end gap-2 rounded-2xl bg-white p-2 shadow-lg ring-1 ring-slate-900/5 dark:bg-slate-800 dark:ring-white/10"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImageSelect}
+            />
             <button
               type="button"
-              onClick={() => setPendingImageUrl(null)}
-              className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white"
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  isUploading ? 'cursor-not-allowed opacity-50' : 'text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-indigo-400'
+              }`}
+              disabled={isUploading}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" />
+              {isUploading ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600" />
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              )}
+            </button>
+            
+            <div className="flex-1 py-2">
+                {pendingImageUrl && (
+                  <div className="relative mb-2 inline-block">
+                    <img src={pendingImageUrl} alt="Preview" className="h-20 w-auto rounded-lg object-cover shadow-sm ring-1 ring-slate-200 dark:ring-slate-700" />
+                    <button
+                      type="button"
+                      onClick={() => setPendingImageUrl(null)}
+                      className="absolute -right-2 -top-2 rounded-full bg-white shadow-md p-1 text-slate-500 hover:text-red-500 dark:bg-slate-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white"
+                  onFocus={() => handleTyping('typing')}
+                  onBlur={() => handleTyping('online')}
+                />
+            </div>
+
+            <button 
+              type="submit" 
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md transition-all hover:bg-indigo-500 hover:shadow-lg disabled:opacity-50 disabled:shadow-none"
+              disabled={message.trim() === '' && !pendingImageUrl}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
-          </div>
-        )}
-
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 rounded border border-gray-300 bg-white p-2 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-          onFocus={() => handleTyping('typing')}
-          onBlur={() => handleTyping('online')}
-        />
-        <button 
-          type="submit" 
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          disabled={message.trim() === '' && !pendingImageUrl}
-        >
-          Send
-        </button>
-      </form>
+          </form>
+      </div>
     </div>
   )
 }
