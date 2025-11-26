@@ -76,16 +76,25 @@ export default async function RoomPage(
 
   // DMの場合、相手の名前をルーム名にする
   if (room.is_group === false) {
-    const { data: partner } = await supabase
+    // 1. 相手のuser_idを取得
+    const { data: participant } = await supabase
       .from('room_participants')
-      .select('profiles(username)')
+      .select('user_id')
       .eq('room_id', room.id)
       .neq('user_id', user.id)
       .single()
     
-    if (partner && partner.profiles) {
-      // @ts-ignore
-      room.name = partner.profiles.username || 'Unknown User'
+    if (participant) {
+      // 2. 相手のプロフィールを取得
+      const { data: partnerProfile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', participant.user_id)
+        .single()
+
+      if (partnerProfile) {
+         room.name = partnerProfile.username || 'Unknown User'
+      }
     }
   }
 
