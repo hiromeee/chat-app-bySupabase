@@ -4,6 +4,10 @@ import { createClient } from '@/utils/supabase/client'
 import { sendMessageToAI } from '@/app/actions'
 import { useState, useEffect, useRef } from 'react' 
 import type { User } from '@supabase/supabase-js'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github-dark.css'
 
 const supabase = createClient()
 
@@ -305,7 +309,43 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                               />
                             </div>
                           )}
-                          {msg.content && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>}
+                          {msg.content && (
+                            <div className="text-sm leading-relaxed break-words markdown-content">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                rehypePlugins={[rehypeHighlight]}
+                                components={{
+                                  p: ({node, ...props}) => <p className="mb-1 last:mb-0" {...props} />,
+                                  a: ({node, ...props}) => <a className="underline hover:text-indigo-300" target="_blank" rel="noopener noreferrer" {...props} />,
+                                  ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
+                                  ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
+                                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                                  code: ({node, className, children, ...props}: any) => {
+                                    const match = /language-(\w+)/.exec(className || '')
+                                    const isInline = !match && !String(children).includes('\n')
+                                    return isInline ? (
+                                      <code className="bg-black/20 rounded px-1 py-0.5 text-[0.9em] font-mono" {...props}>
+                                        {children}
+                                      </code>
+                                    ) : (
+                                      <code className={className} {...props}>
+                                        {children}
+                                      </code>
+                                    )
+                                  },
+                                  pre: ({node, ...props}) => (
+                                    <pre className="bg-[#0d1117] rounded-lg p-3 my-2 overflow-x-auto text-xs" {...props} />
+                                  ),
+                                  table: ({node, ...props}) => <table className="border-collapse border border-white/20 my-2 w-full text-xs" {...props} />,
+                                  th: ({node, ...props}) => <th className="border border-white/20 px-2 py-1 bg-white/10" {...props} />,
+                                  td: ({node, ...props}) => <td className="border border-white/20 px-2 py-1" {...props} />,
+                                  blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-white/30 pl-2 italic my-2" {...props} />,
+                                }}
+                              >
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Actions (Delete) */}
@@ -378,12 +418,18 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                     </button>
                   </div>
                 )}
-                <input
-                  type="text"
+                <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white"
+                  className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white resize-none"
+                  rows={1}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSubmit(e)
+                    }
+                  }}
                   onFocus={() => handleTyping('typing')}
                   onBlur={() => handleTyping('online')}
                 />
