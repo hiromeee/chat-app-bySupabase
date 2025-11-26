@@ -107,7 +107,8 @@ export default async function RoomPage(
       image_url,
       created_at,
       user_id,
-      profiles!inner ( username )
+      profiles!inner ( username ),
+      message_reactions ( id, emoji, user_id )
     `)
     .eq('room_id', roomId)
     .order('created_at', { ascending: true })
@@ -122,6 +123,7 @@ export default async function RoomPage(
           ...m,
           // Supabase join with profiles!inner returns an array; normalize to a single object or null
           profiles: Array.isArray(m.profiles) ? (m.profiles[0] ?? null) : m.profiles,
+          reactions: m.message_reactions || []
         }))
       } 
       room={room as Room} 

@@ -1,17 +1,25 @@
-'use client' 
+'use client'
 
 import { createClient } from '@/utils/supabase/client'
 import { sendMessageToAI } from '@/app/actions'
-import { useState, useEffect, useRef } from 'react' 
+import { useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
+import EmojiPicker, { Theme } from 'emoji-picker-react'
 
 const supabase = createClient()
 
 // 型定義
+type Reaction = {
+  id: number
+  emoji: string
+  user_id: string
+  message_id?: number // Optional for local state updates
+}
+
 type Message = {
   id: number
   content: string
@@ -20,7 +28,8 @@ type Message = {
   user_id: string
   profiles: {
     username: string | null
-  } | null 
+  } | null
+  reactions?: Reaction[]
 }
 type Profile = {
   username: string | null
@@ -38,18 +47,19 @@ type UserPresence = {
 type ChatRoomProps = {
   user: User
   profile: Profile
-  initialMessages: Message[] 
-  room: Room 
+  initialMessages: Message[]
+  room: Room
 }
 
 export default function ChatRoom({ user, profile, initialMessages, room }: ChatRoomProps) {
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState(initialMessages)
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null)
   const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null)
-  
+  const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const myUsername = profile?.username ?? user.email ?? 'Unknown User'
@@ -74,12 +84,34 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         .eq('id', newMessage.user_id)
         .single()
       newMessage.profiles = error ? { username: 'Unknown' } : { username: profileData?.username ?? 'Unknown' }
+      newMessage.reactions = []
 
       setMessages((current) => current.find((m) => m.id === newMessage.id) ? current : [...current, newMessage])
     }
 
     const handleDeleteMessage = (payload: any) => {
       setMessages((current) => current.filter((msg) => msg.id !== payload.old.id))
+    }
+
+    const handleNewReaction = (payload: any) => {
+      const newReaction = payload.new as Reaction
+      setMessages((current) => current.map((msg) => {
+        if (msg.id === newReaction.message_id) {
+           return {
+             ...msg,
+             reactions: [...(msg.reactions || []), newReaction]
+           }
+        }
+        return msg
+      }))
+    }
+
+    const handleDeleteReaction = (payload: any) => {
+      const oldReaction = payload.old as Reaction
+      setMessages((current) => current.map((msg) => ({
+        ...msg,
+        reactions: (msg.reactions || []).filter((r) => r.id !== oldReaction.id)
+      })))
     }
     
     channel
@@ -95,6 +127,16 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         table: 'messages',
         filter: `room_id=eq.${room.id}` 
       }, handleDeleteMessage)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'message_reactions',
+      }, handleNewReaction)
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'message_reactions',
+      }, handleDeleteReaction)
 
       .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState<UserPresence>()
@@ -196,6 +238,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
         created_at: (insertedMessage as any).created_at,
         user_id: (insertedMessage as any).user_id,
         profiles: normalizedProfiles,
+        reactions: []
       }
 
       setMessages((currentMessages) => [
@@ -237,6 +280,72 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     })
   }
 
+  const toggleReaction = async (messageId: number, emoji: string) => {
+    const message = messages.find(m => m.id === messageId)
+    if (!message) return
+
+    const existingReaction = message.reactions?.find(
+      r => r.user_id === user.id && r.emoji === emoji
+    )
+
+    if (existingReaction) {
+      // Optimistic Delete
+      setMessages(current => current.map(m => {
+        if (m.id === messageId) {
+          return {
+            ...m,
+            reactions: (m.reactions || []).filter(r => r.id !== existingReaction.id)
+          }
+        }
+        return m
+      }))
+      await supabase.from('message_reactions').delete().eq('id', existingReaction.id)
+    } else {
+      // Optimistic Insert
+      const tempId = Date.now()
+      const newReaction = { id: tempId, emoji, user_id: user.id, message_id: messageId }
+      setMessages(current => current.map(m => {
+        if (m.id === messageId) {
+          return {
+            ...m,
+            reactions: [...(m.reactions || []), newReaction]
+          }
+        }
+        return m
+      }))
+
+      const { data, error } = await supabase.from('message_reactions').insert({
+        message_id: messageId,
+        user_id: user.id,
+        emoji
+      }).select().single()
+
+      if (data) {
+        setMessages(current => current.map(m => {
+          if (m.id === messageId) {
+            return {
+              ...m,
+              reactions: (m.reactions || []).map(r => r.id === tempId ? data : r)
+            }
+          }
+          return m
+        }))
+      } else if (error) {
+        console.error('Error adding reaction:', error)
+        // Revert
+        setMessages(current => current.map(m => {
+            if (m.id === messageId) {
+              return {
+                ...m,
+                reactions: (m.reactions || []).filter(r => r.id !== tempId)
+              }
+            }
+            return m
+          }))
+      }
+    }
+  }
+
   return (
     <div className="flex h-full w-full flex-col"> 
       {/* Header */}
@@ -266,6 +375,14 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
             const isMe = msg.user_id === user.id;
             const showAvatar = !isMe && (index === 0 || messages[index - 1].user_id !== msg.user_id);
             
+            // Group reactions
+            const reactionGroups = (msg.reactions || []).reduce((acc, r) => {
+                if (!acc[r.emoji]) acc[r.emoji] = { count: 0, hasReacted: false }
+                acc[r.emoji].count++
+                if (r.user_id === user.id) acc[r.emoji].hasReacted = true
+                return acc
+            }, {} as Record<string, { count: number, hasReacted: boolean }>)
+
             return (
               <div
                 key={msg.id}
@@ -360,6 +477,57 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                                 </svg>
                             </button>
                         )}
+                    </div>
+
+                    {/* Reactions */}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                        {Object.entries(reactionGroups).map(([emoji, { count, hasReacted }]) => (
+                            <button
+                                key={emoji}
+                                onClick={() => toggleReaction(msg.id, emoji)}
+                                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all ${
+                                    hasReacted 
+                                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/30 dark:text-indigo-200 dark:border-indigo-500/50' 
+                                    : 'bg-white/50 text-slate-600 border border-slate-200 hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                <span>{emoji}</span>
+                                {count > 1 && <span>{count}</span>}
+                            </button>
+                        ))}
+                        
+                        <div className="relative">
+                            <button
+                                onClick={() => setActiveReactionMessageId(activeReactionMessageId === msg.id ? null : msg.id)}
+                                className={`flex h-5 w-5 items-center justify-center rounded-full bg-white/50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:bg-slate-800/50 dark:hover:bg-slate-700 transition-all ${
+                                    activeReactionMessageId === msg.id || Object.keys(reactionGroups).length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                }`}
+                                title="Add reaction"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
+                            
+                            {activeReactionMessageId === msg.id && (
+                                <div className="absolute bottom-8 left-0 z-50">
+                                    <div className="fixed inset-0 z-40" onClick={() => setActiveReactionMessageId(null)} />
+                                    <div className="relative z-50 shadow-xl rounded-lg overflow-hidden">
+                                        <EmojiPicker 
+                                            onEmojiClick={(e) => {
+                                                toggleReaction(msg.id, e.emoji)
+                                                setActiveReactionMessageId(null)
+                                            }}
+                                            width={300}
+                                            height={400}
+                                            theme={Theme.AUTO}
+                                            searchDisabled
+                                            skinTonesDisabled
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     {/* Timestamp */}
