@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+
 
 // ルーム作成アクション
 export async function createRoom(formData: FormData) {
@@ -106,8 +106,8 @@ export async function sendMessageToAI(messageContent: string, roomId: number) {
     }
 
     // 1. Geminiの初期化
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    const { GoogleGenAI } = await import('@google/genai')
+    const genAI = new GoogleGenAI({ apiKey })
 
     // 2. 現在時刻を取得（日本時間）
     const now = new Date().toLocaleString('ja-JP', { 
@@ -128,9 +128,21 @@ ${messageContent}
     `.trim()
 
     // 4. AIに回答を生成させる
-    const result = await model.generateContent(promptWithContext)
-    const response = await result.response
-    const aiText = response.text()
+    const result = await genAI.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: promptWithContext
+            }
+          ]
+        }
+      ]
+    })
+    
+    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Error: No response text'
 
     // 5. SupabaseにAIの回答を保存する
     const cookieStore = await cookies()
