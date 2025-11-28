@@ -5,7 +5,6 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
-
 // ルーム作成アクション
 export async function createRoom(formData: FormData) {
   const roomName = formData.get('room_name') as string
@@ -16,6 +15,11 @@ export async function createRoom(formData: FormData) {
 
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return
+  }
 
   const { data: newRoom, error } = await supabase
     .from('rooms')
@@ -26,6 +30,20 @@ export async function createRoom(formData: FormData) {
   if (error) {
     console.error('Error creating room:', error)
     return
+  }
+
+  // 作成者を管理者として追加
+  const { error: participantError } = await supabase
+    .from('room_participants')
+    .insert({ 
+      room_id: newRoom.id, 
+      user_id: user.id,
+      role: 'admin' 
+    })
+
+  if (participantError) {
+    console.error('Error adding admin participant:', participantError)
+    // 失敗した場合のロールバック処理などは簡易アプリなので省略
   }
 
   revalidatePath('/room')
@@ -161,4 +179,37 @@ ${messageContent}
   } catch (error) {
     console.error('AI Action Error:', error)
   }
+}
+
+// メッセージ削除アクション
+export async function deleteMessage(messageId: number, roomId: number) {
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
+  
+  // RLSポリシーにより、作成者または管理者のみが削除可能
+  const { error } = await supabase.from('messages').delete().eq('id', messageId)
+  
+  if (error) {
+    console.error('Error deleting message:', error)
+    throw error
+  }
+  
+  revalidatePath(`/room/${roomId}`)
+}
+
+// ルーム削除アクション
+export async function deleteRoom(roomId: number) {
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
+
+  // RLSポリシーにより、管理者のみが削除可能
+  const { error } = await supabase.from('rooms').delete().eq('id', roomId)
+
+  if (error) {
+    console.error('Error deleting room:', error)
+    throw error
+  }
+
+  revalidatePath('/room')
+  redirect('/room')
 }

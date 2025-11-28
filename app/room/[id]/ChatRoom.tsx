@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/utils/supabase/client'
-import { sendMessageToAI } from '@/app/actions'
+import { sendMessageToAI, deleteMessage } from '@/app/actions'
 import { useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import ReactMarkdown from 'react-markdown'
@@ -60,6 +60,8 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null)
   const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null)
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<number | null>(null)
+  const [isRoomAdmin, setIsRoomAdmin] = useState(false)
+  const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set())
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -69,6 +71,23 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Check User Role & Fetch Admins
+  useEffect(() => {
+    const checkRole = async () => {
+      const { data, error } = await supabase
+        .from('room_participants')
+        .select('user_id')
+        .eq('room_id', room.id)
+        .eq('role', 'admin')
+      
+      if (data) {
+        const admins = new Set(data.map(p => p.user_id))
+        setAdminUserIds(admins)
+        setIsRoomAdmin(admins.has(user.id))
+      }
+    }
+    checkRole()
+  }, [room.id, user.id])
 
   useEffect(() => {
     
@@ -263,13 +282,17 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
     const messageId = deletingMessageId
     setDeletingMessageId(null) // Close modal immediately
 
+    // Optimistic update
     setMessages((currentMessages) => 
       currentMessages.filter((msg) => msg.id !== messageId)
     )
-    const { error } = await supabase.from('messages').delete().eq('id', messageId)
-    if (error) {
-      console.error('Error deleting message:', error)
-      window.location.reload()
+
+    try {
+        await deleteMessage(messageId, room.id)
+    } catch (error) {
+        console.error('Error deleting message:', error)
+        alert('Failed to delete message')
+        window.location.reload()
     }
   }
 
@@ -403,8 +426,13 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                 <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
                     {/* Username */}
                     {!isMe && showAvatar && (
-                      <span className="mb-1 ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <span className="mb-1 ml-1 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         {msg.profiles?.username ?? 'Unknown'}
+                        {adminUserIds.has(msg.user_id) && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30">
+                                Admin
+                            </span>
+                        )}
                       </span>
                     )}
 
@@ -472,7 +500,7 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                         </div>
                         
                         {/* Actions (Delete) */}
-                        {isMe && (
+                        {(isMe || isRoomAdmin) && (
                             <button
                                 onClick={() => confirmDelete(msg.id)}
                                 className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/bubble:opacity-100 text-slate-400 hover:text-red-500"

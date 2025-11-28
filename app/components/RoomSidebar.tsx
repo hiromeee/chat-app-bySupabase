@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation' 
 import { useState, useEffect, useRef } from 'react' 
-import { createRoom, startDirectChat } from '../actions' // サーバーアクション
+import { createRoom, startDirectChat, deleteRoom } from '../actions' // サーバーアクション
 
 // ルームの型定義
 type Room = {
@@ -17,6 +17,7 @@ export default function RoomSidebar() {
   const pathname = usePathname() 
 
   const [rooms, setRooms] = useState<Room[]>([])
+  const [adminRoomIds, setAdminRoomIds] = useState<Set<number>>(new Set())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [users, setUsers] = useState<any[]>([])
@@ -33,6 +34,20 @@ export default function RoomSidebar() {
         console.error('Error fetching rooms:', error)
       } else {
         setRooms(data || [])
+      }
+
+      // Fetch admin rooms
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+          const { data: adminData } = await supabase
+            .from('room_participants')
+            .select('room_id')
+            .eq('user_id', user.id)
+            .eq('role', 'admin')
+          
+          if (adminData) {
+              setAdminRoomIds(new Set(adminData.map(r => r.room_id)))
+          }
       }
     }
     fetchRooms()
@@ -105,20 +120,37 @@ export default function RoomSidebar() {
           {rooms.map((room) => {
             const isActive = pathname === `/room/${room.id}`
             return (
-              <Link
-                key={room.id}
-                href={`/room/${room.id}`}
-                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-white/80 text-indigo-600 shadow-sm dark:bg-slate-800/80 dark:text-indigo-400' 
-                    : 'text-slate-600 hover:bg-white/50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200' 
-                }`}
-              >
-                <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold transition-colors ${
-                    isActive ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20' : 'bg-slate-200 text-slate-500 group-hover:bg-indigo-50 group-hover:text-indigo-500 dark:bg-slate-800 dark:text-slate-500 dark:group-hover:bg-slate-700'
-                }`}>#</span>
-                {room.name}
-              </Link>
+              <div key={room.id} className="group relative flex items-center">
+                  <Link
+                    href={`/room/${room.id}`}
+                    className={`flex-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-white/80 text-indigo-600 shadow-sm dark:bg-slate-800/80 dark:text-indigo-400' 
+                        : 'text-slate-600 hover:bg-white/50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200' 
+                    }`}
+                  >
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold transition-colors ${
+                        isActive ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20' : 'bg-slate-200 text-slate-500 group-hover:bg-indigo-50 group-hover:text-indigo-500 dark:bg-slate-800 dark:text-slate-500 dark:group-hover:bg-slate-700'
+                    }`}>#</span>
+                    {room.name}
+                  </Link>
+                  {adminRoomIds.has(room.id) && (
+                      <button
+                        onClick={(e) => {
+                            e.preventDefault()
+                            if (confirm('Are you sure you want to delete this room?')) {
+                                deleteRoom(room.id)
+                            }
+                        }}
+                        className="absolute right-2 p-1.5 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        title="Delete Room"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                  )}
+              </div>
             )
           })}
         </div>
