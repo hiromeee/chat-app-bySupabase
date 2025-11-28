@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/utils/supabase/client'
-import { sendMessageToAI, deleteMessage } from '@/app/actions'
+import { sendMessageToAI, deleteMessage } from '@/app/actions/chat'
 import { useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import ReactMarkdown from 'react-markdown'
@@ -9,42 +9,11 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import EmojiPicker, { Theme } from 'emoji-picker-react'
-import LinkPreview from '@/app/components/LinkPreview'
+import LinkPreview from '@/app/components/ui/LinkPreview'
+import type { Message, Profile, Reaction, Room, UserPresence } from '@/types'
 
 const supabase = createClient()
 
-// 型定義
-type Reaction = {
-  id: number
-  emoji: string
-  user_id: string
-  message_id?: number // Optional for local state updates
-}
-
-type Message = {
-  id: number
-  content: string
-  image_url: string | null
-  created_at: string
-  user_id: string
-  profiles: {
-    username: string | null
-  } | null
-  reactions?: Reaction[]
-}
-type Profile = {
-  username: string | null
-}
-type Room = {
-  id: number
-  name: string
-}
-type UserPresence = {
-  username: string
-  status: 'online' | 'typing'
-}
-
-// Propsの型
 type ChatRoomProps = {
   user: User
   profile: Profile

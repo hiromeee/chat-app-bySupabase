@@ -3,8 +3,8 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link' 
-import RoomSidebar from './components/RoomSidebar'
-import HelpModal from './components/HelpModal'
+import RoomSidebar from '@/app/components/features/RoomSidebar'
+import HelpModal from '@/app/components/features/HelpModal'
 
 async function signOut() {
   'use server' 
@@ -14,7 +14,7 @@ async function signOut() {
   return redirect('/login')
 }
 
-export default async function RootLayout({ children }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
   const {

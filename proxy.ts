@@ -1,17 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 
-// ★ 変更: 関数名を 'middleware' から 'proxy' に変更
-export async function proxy(request) {
-  
-  // params が失われないよう、request オブジェクト全体を渡す
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
-    request: request, 
+    request: request,
   })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name) {
