@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import EmojiPicker, { Theme } from 'emoji-picker-react'
+import LinkPreview from '@/app/components/LinkPreview'
 
 const supabase = createClient()
 
@@ -432,8 +433,13 @@ export default function ChatRoom({ user, profile, initialMessages, room }: ChatR
                                 remarkPlugins={[remarkGfm]}
                                 rehypePlugins={[rehypeHighlight]}
                                 components={{
-                                  p: ({node, ...props}) => <p className="mb-1 last:mb-0" {...props} />,
-                                  a: ({node, ...props}) => <a className="underline hover:text-indigo-300" target="_blank" rel="noopener noreferrer" {...props} />,
+                                  p: ({node, ...props}) => <div className="mb-1 last:mb-0" {...props} />,
+                                  a: ({node, ...props}) => (
+                                    <>
+                                      <a className="underline hover:text-indigo-300" target="_blank" rel="noopener noreferrer" {...props} />
+                                      {props.href && <LinkPreview url={props.href} />}
+                                    </>
+                                  ),
                                   ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
                                   ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
                                   li: ({node, ...props}) => <li className="mb-1" {...props} />,
